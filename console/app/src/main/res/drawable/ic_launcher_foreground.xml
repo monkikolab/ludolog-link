@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  El icono: la gema con el ojo de Ludolog, y dos ondas a cada lado. Ludolog, hablando por Wi-Fi.
+
+  La gema es la de ic_launcher_foreground.xml de Ludolog (ludolog-front-end), con sus mismos colores
+  y coordenadas (las de companion.svg, 601 x 1046), a 48 dp de alto en vez de 56: asi las ondas caben
+  en el circulo de 66 dp que la mascara del lanzador siempre deja ver. El mismo dibujo, recortado,
+  es KitIcons.App del PC (ludolog-link/kit).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="40.21"
+        android:translateY="30"
+        android:scaleX="0.04589"
+        android:scaleY="0.04589">
+        <path android:fillColor="#A3232A" android:pathData="M300,0 L301,1043 L601,416 Z" />
+        <path android:fillColor="#E25A5E" android:pathData="M301,1043 L0,416 L300,0 Z" />
+        <path android:fillColor="#4E0D10" android:pathData="M300.4,592.7 L600.5,416.5 L300.5,1045.5 Z" />
+        <path android:fillColor="#A3232A" android:pathData="M300.6,593.7 L0.5,417.5 L300.5,1046.5 Z" />
+        <path android:fillColor="#C83A40" android:pathData="M300.36,591.59 L497.86,474.7 L298.35,337.66 L88.75,468.65 Z" />
+        <path android:fillColor="#1C0507" android:pathData="M365.5,474.2 L346.5,500.7 L300.5,511.7 L254.5,500.7 L235.5,474.2 L254.5,447.7 L300.5,436.7 L346.5,447.7 Z" />
+    </group>
+    <!-- Las ondas: la cercana clara, la lejana apagada. -->
+    <path android:strokeColor="#E25A5E" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M36.8,41.96 A21,21 0 0,0 36.8,66.04 M71.2,41.96 A21,21 0 0,1 71.2,66.04" />
+    <path android:strokeColor="#A3232A" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M31.06,37.94 A28,28 0 0,0 31.06,70.06 M76.94,37.94 A28,28 0 0,1 76.94,70.06" />
+</vector>

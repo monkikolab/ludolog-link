@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Monocromo, para el mosaico y la notificacion: el sistema le pone el color. Es la monocroma del
+  icono, recortada a su centro de 72 y a 24 dp, con las ondas mas gruesas para que se lean.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <group android:translateX="-18" android:translateY="-18">
+    <group
+            android:translateX="40.21"
+            android:translateY="30"
+            android:scaleX="0.04589"
+            android:scaleY="0.04589">
+            <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+                android:pathData="M300,0 L601,416 L300.5,1046.5 L0,416 Z M300.36,591.59 L497.86,474.7 L298.35,337.66 L88.75,468.65 Z M365.5,474.2 L346.5,500.7 L300.5,511.7 L254.5,500.7 L235.5,474.2 L254.5,447.7 L300.5,436.7 L346.5,447.7 Z" />
+        </group>
+        <path android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round"
+            android:pathData="M36.8,41.96 A21,21 0 0,0 36.8,66.04 M71.2,41.96 A21,21 0 0,1 71.2,66.04 M31.06,37.94 A28,28 0 0,0 31.06,70.06 M76.94,37.94 A28,28 0 0,1 76.94,70.06" />
+    </group>
+</vector>

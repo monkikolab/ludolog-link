@@ -1,0 +1,15 @@
+# Gradle y el IDE
+.gradle/
+.kotlin/
+build/
+.idea/
+*.iml
+local.properties
+
+# Firma: nunca en el repositorio
+keystore.properties
+*.jks
+*.keystore
+
+# Hojas de trabajo
+docs/*.xlsx

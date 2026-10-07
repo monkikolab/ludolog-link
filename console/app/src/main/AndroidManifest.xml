@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Sin este bloqueo algunos Android descartan los paquetes de busqueda del PC. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Android 14+: escuchar a los devices sin el tope diario de dataSync (ver LinkService.fgsType). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Volver a escuchar al encender la consola. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Pedir a la persona que Android no le aplique el ahorro de bateria (ver Background). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Escribir en la carpeta de ROMs, este en la memoria interna o en la SD. -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- El puente de Ludolog: solo apps con su misma firma. Declarado aqui tambien, como en
+         Ludolog, para que funcione la instale quien la instale primero.
+         Contrato en ludolog-front-end/docs/ludolog-link.md. -->
+    <permission
+        android:name="com.felp.frontcomp.permission.LINK"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.felp.frontcomp.permission.LINK" />
+
+    <!-- Ver si Ludolog esta instalada y que version (Android 11+ esconde los paquetes). -->
+    <queries>
+        <package android:name="com.felp.frontcomp" />
+        <!-- La app de ajustes del limpiador de procesos de algunas consolas: cierra Link si no esta en sus excepciones (ver Background). -->
+        <package android:name="com.rp.settings" />
+        <!-- Las apps instaladas, para elegir emuladores en la pestaña de partidas guardadas. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="Ludolog Link"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Exportado solo para Ludolog (permiso de firma): al volver a primer plano lo despierta si
+             hace falta. Android 15 no deja que Link se despierte solo desde segundo plano; a una app
+             a la vista que lo pide, si. Ver LinkSaveCheck.refresh en Ludolog. -->
+        <service
+            android:name=".LinkService"
+            android:exported="true"
+            android:permission="com.felp.frontcomp.permission.LINK"
+            android:foregroundServiceType="dataSync|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Listens on the local Wi-Fi for the user's own paired handhelds, to sync game saves and play logs between them." />
+        </service>
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Mosaico del panel rapido para encender y apagar PC Link. -->
+        <service
+            android:name=".LinkTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile"
+            android:label="Ludolog Link"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
+        </service>
+        <!-- Ludolog pregunta aqui, antes de abrir un juego, si hay una partida mas nueva en otro device (ver SaveCheck). -->
+        <provider
+            android:name=".SaveCheckProvider"
+            android:authorities="com.felp.ludologlink.savecheck"
+            android:exported="true"
+            android:permission="com.felp.frontcomp.permission.LINK" />
+    </application>
+</manifest>

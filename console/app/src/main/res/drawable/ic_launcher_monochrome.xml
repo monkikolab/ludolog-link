@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  De un tono, para los iconos tematicos de Android 13: la gema con el ojo en hueco (evenOdd, como la
+  monocroma de Ludolog) y las ondas.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="40.21"
+        android:translateY="30"
+        android:scaleX="0.04589"
+        android:scaleY="0.04589">
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+            android:pathData="M300,0 L601,416 L300.5,1046.5 L0,416 Z M300.36,591.59 L497.86,474.7 L298.35,337.66 L88.75,468.65 Z M365.5,474.2 L346.5,500.7 L300.5,511.7 L254.5,500.7 L235.5,474.2 L254.5,447.7 L300.5,436.7 L346.5,447.7 Z" />
+    </group>
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M36.8,41.96 A21,21 0 0,0 36.8,66.04 M71.2,41.96 A21,21 0 0,1 71.2,66.04 M31.06,37.94 A28,28 0 0,0 31.06,70.06 M76.94,37.94 A28,28 0 0,1 76.94,70.06" />
+</vector>

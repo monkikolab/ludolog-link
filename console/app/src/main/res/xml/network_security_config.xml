@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Link habla por HTTP sin cifrar con las otras consolas de la misma Wi-Fi (compartir el Companion,
+  ver CompanionShare), igual que el PC con ella: en la red de casa y siempre con token. Android lo
+  prohibe por defecto a las apps; aqui se permite. Link no se conecta a nada fuera de la red local.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
