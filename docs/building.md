@@ -13,9 +13,16 @@ Requirements: JDK 21, and the Android SDK for the device app.
 
 ```bash
 cd console && ./gradlew assembleDebug        # Android app
+cd console && ./gradlew assembleDev          # Link Dev, next to the official Link
 cd pc && ./gradlew createDistributable       # Windows app, to try it
 cd pc && ./gradlew buildRelease              # Windows installer (.msi) and portable .zip
 ```
+
+**Link Dev** (package `com.felp.ludologlink.dev`) is for testing on devices that keep the official
+apps. It talks to Ludolog Dev instead of Ludolog, listens on its own ports (the official ones plus
+10) and keeps its save backups in `LudologLinkDev`, so it only finds other Link Dev devices. The PC
+app does the same when started with `LUDOLOG_LINK_DEV=1`, and then keeps its settings and data in
+`%APPDATA%\LudologLinkDev`.
 
 The version comes from `version.properties` in ludolog-front-end, shared by all three apps. The
 Android app must be signed with the same key as Ludolog: its release build reads the same

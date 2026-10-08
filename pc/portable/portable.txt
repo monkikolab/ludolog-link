@@ -1,0 +1,8 @@
+This copy of Ludolog Link is portable.
+
+It keeps its settings, backups, downloaded games and PC catalog in the "data" folder next to it,
+unless you choose other folders in Settings, This PC. Move the whole folder and everything goes with
+it; delete it to remove Ludolog Link.
+
+Delete this file and Ludolog Link keeps its settings in your Windows user folder instead, like the
+installed version.

@@ -70,7 +70,7 @@ Link runs as a foreground service, so Android keeps it connected while the devic
 
 The first launch after installing or updating takes a few extra seconds: Link prepares itself to
 start faster from then on. If you use the portable copy, keep it in a folder you can write to (not
-*Program Files*), or every launch will be a little slower.
+*Program Files*): it keeps everything in a `data` folder next to it.
 
 Turn on PC Link on the device and click *Search*. Each connected device has these tabs:
 
@@ -88,8 +88,10 @@ Turn on PC Link on the device and click *Search*. Each connected device has thes
 - **Settings**: *This PC* (name, folders, PC catalog), *Console* (Ludolog's settings for the device,
   sent with *Sync to device*) and *About*.
 
-The **PC catalog** is a folder of games on the PC, one folder per console, set in *Settings → This
-PC*. Deleting a game from a device is permanent. If you quit during transfers, downloads resume later
+Link keeps its things in a data folder: the installed app in your Windows user folder, the portable
+copy next to itself. Backups, downloaded games and the **PC catalog** (games kept on the PC, one
+folder per console, with their box art and videos) go inside it unless you move them in *Settings →
+This PC*. Deleting a game from a device is permanent. If you quit during transfers, downloads resume later
 and partial uploads are discarded.
 
 ## About and diagnostics

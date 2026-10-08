@@ -17,14 +17,14 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * 1. en las miniaturas que Ludolog Link deja en cada device (`companion/covers/`), en las copias de
  *    sus datos en el PC: las de los juegos de otra consola;
- * 2. en las que el PC ya guardo (`%APPDATA%/LudologLink/covers/`);
+ * 2. en las que el PC ya guardo (`covers/` en PcDirs.home);
  * 3. y si no, se le pide a un device conectado que tenga el juego (su caratula, como al pasar el
  *    raton en Games), se reduce y se guarda para la proxima, tambien sin conexion.
  *
  * [find] no espera: si la trae despues, sube [revision] y la pantalla la vuelve a pedir.
  */
 internal object CompanionCoversPc {
-    private val dir = File(File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "LudologLink"), "covers").apply { mkdirs() }
+    private val dir = File(PcDirs.home, "covers").apply { mkdirs() }
     private val asked = ConcurrentHashMap.newKeySet<String>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

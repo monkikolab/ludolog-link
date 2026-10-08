@@ -2,7 +2,7 @@
 
 # Ludolog Link
 
-**v0.5.0** · The companion of [Ludolog](https://github.com/monkikolab/ludolog-front-end). It keeps
+**v0.5.2** · The companion of [Ludolog](https://github.com/monkikolab/ludolog-front-end). It keeps
 your handhelds in sync with each other and with your PC, over your own Wi-Fi.
 
 <p align="center"><img src="docs/media/link-pc.gif" alt="Ludolog Link on the PC with two handhelds: overview, games across devices, cover preview, game panel, consoles and the Companion" width="860"></p>
@@ -46,9 +46,10 @@ Sharing and PC Link.
    - **Installer** (`.msi`): installs for your user, with no administrator rights, and adds Start
      menu and desktop shortcuts. A newer one replaces the old; uninstall it from Windows settings.
    - **Portable** (`-portable.zip`): unzip it in a folder you can write to and run
-     `Ludolog Link.exe`. Nothing is installed; delete the folder to remove it.
+     `Ludolog Link.exe`. Nothing is installed: it keeps its settings, backups and downloaded games
+     in a `data` folder next to it, so you can carry it around, and deleting the folder removes it.
 
-   Both keep their settings in your Windows user folder, so you can switch from one to the other.
+   You can move Link's folders (data, downloaded games, PC catalog) in Settings, This PC.
    If Windows says *Windows protected your PC*, choose *More info* → *Run anyway*. The first launch
    takes a little longer.
 

@@ -24,14 +24,14 @@ data class LogEntry(val t: Long, val kind: String, val text: String, val error: 
  * respaldos, arte, ajustes...) y lo que apunto la consola en su actividad (partidas sincronizadas,
  * Companion compartido, lo que hicieron otras consolas y el PC), que se le pide con GET /log.
  *
- * En `%APPDATA%/LudologLink/log/`: `pc.jsonl`, lo del PC, y `<id>.jsonl`, la copia de lo de cada
+ * En `log/` de PcDirs.home: `pc.jsonl`, lo del PC, y `<id>.jsonl`, la copia de lo de cada
  * consola, para verlo tambien sin conexion. Una linea JSON por entrada; quedan las ultimas [KEEP].
  * Los `kind` son los de la consola (LinkLog alli): saves, companion, roms, files, art, settings,
  * backup, ludolog, pairing, link.
  */
 object PcLog {
     private const val KEEP = 3000
-    private val dir = File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "LudologLink/log")
+    private val dir = File(PcDirs.home, "log")
     private val cache = HashMap<String, MutableList<LogEntry>>()
 
     /** Sube con cada cambio: la pestaña vuelve a leer. */

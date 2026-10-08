@@ -68,7 +68,7 @@ internal object PcScraper {
     fun stash(consoleId: String) = File(Config.consoleDir(consoleId), "scrape/media")
 
     /** Indices de libretro y listados de archive.org: los mismos para todas las consolas. */
-    private val cache = File(System.getenv("LOCALAPPDATA") ?: System.getProperty("java.io.tmpdir"), "LudologLink/scrape-cache")
+    private val cache = File(PcDirs.cache, "scrape-cache")
 
     /**
      * Lo que el scraper lee de la consola (sus fichas, su catalogo corregido) sale de su copia en

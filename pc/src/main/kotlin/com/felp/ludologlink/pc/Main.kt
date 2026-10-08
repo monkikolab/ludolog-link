@@ -72,7 +72,7 @@ fun main(args: Array<String>) {
         "--companion" -> return companionTest(File(args[1]), args[2])
         "--video" -> return videoTest(args.drop(1))
     }
-    FileKit.init(appId = "LudologLink")
+    FileKit.init(appId = if (Dev.ON) "LudologLinkDev" else "LudologLink")
     application {
         val windowState = rememberWindowState(size = DpSize(1720.dp, 810.dp), position = WindowPosition(Alignment.Center))
         // Un ambito que sobrevive a un fallo: con el de la composicion, una excepcion que no fuera de
@@ -91,7 +91,7 @@ fun main(args: Array<String>) {
         Window(
             onCloseRequest = { if (app.transfers.active) confirmExit = true else exitApplication() },
             state = windowState,
-            title = "Ludolog Link",
+            title = Dev.name,
             icon = rememberVectorPainter(KitIcons.App),
         ) {
             val theme = app.theme
@@ -205,7 +205,7 @@ private fun Sidebar(app: AppState, window: java.awt.Window, onUpload: (List<File
             Icon(rememberVectorPainter(KitIcons.App), null, Modifier.size(36.dp), tint = Color.Unspecified)
             Spacer(Modifier.width(10.dp))
             Column {
-                Text(Look.title("Ludolog Link"), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                Text(Look.title(Dev.name), style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Text("Your devices, from your PC", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

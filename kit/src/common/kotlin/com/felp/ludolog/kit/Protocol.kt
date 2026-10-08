@@ -9,6 +9,11 @@ object Protocol {
     const val APP = "ludolog-link"
     const val HTTP_PORT = 53350
     const val DISCOVERY_PORT = 53351
+    /**
+     * Lo que corre sus puertos la version de desarrollo (Link Dev, en la consola y en el PC): asi
+     * convive con la oficial en el mismo aparato y cada una solo encuentra a las de su clase.
+     */
+    const val DEV_PORT_OFFSET = 10
     const val DISCOVERY_MAGIC = "LUDOLOG_LINK_DISCOVER"
     const val DISCOVERY_QUERY = "LUDOLOG_LINK_DISCOVER v1"
     /**

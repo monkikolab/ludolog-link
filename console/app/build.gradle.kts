@@ -44,6 +44,12 @@ android {
         targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersion
+        // A que Ludolog le habla y como se llama: lo que cambia Link Dev (ver `dev` abajo y Dev.kt).
+        buildConfigField("boolean", "DEV", "false")
+        buildConfigField("String", "LUDOLOG_PACKAGE", "\"com.felp.frontcomp\"")
+        buildConfigField("String", "LUDOLOG_DATA", "\"Ludolog\"")
+        manifestPlaceholders["appLabel"] = "Ludolog Link"
+        manifestPlaceholders["ludologPackage"] = "com.felp.frontcomp"
     }
 
     if (hasSigning) {
@@ -63,6 +69,21 @@ android {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             if (hasSigning) signingConfig = signingConfigs.getByName("release")
+        }
+        // Link Dev, para probar al lado de la oficial firmada (07-10-2026): otro paquete, firmado
+        // con la clave de debug, que le habla a Ludolog Dev (`assembleDev` en ludolog-front-end) y
+        // escucha en otros puertos. Ver Dev.kt.
+        //
+        //   ./gradlew assembleDev
+        create("dev") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".dev"
+            matchingFallbacks += "debug"
+            buildConfigField("boolean", "DEV", "true")
+            buildConfigField("String", "LUDOLOG_PACKAGE", "\"com.felp.frontcomp.dev\"")
+            buildConfigField("String", "LUDOLOG_DATA", "\"LudologDev\"")
+            manifestPlaceholders["appLabel"] = "Link Dev"
+            manifestPlaceholders["ludologPackage"] = "com.felp.frontcomp.dev"
         }
     }
     compileOptions {

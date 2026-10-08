@@ -86,7 +86,7 @@ object Saves {
     // ----------------------------------------------------- carpeta de Link
 
     /** `<memoria interna>/LudologLink`: lo de Link, a la vista y fuera de la app. */
-    fun home(): File = File(Environment.getExternalStorageDirectory(), "LudologLink")
+    fun home(): File = File(Environment.getExternalStorageDirectory(), Dev.folder)
 
     private fun state(name: String) = File(home(), "state/$name")
 

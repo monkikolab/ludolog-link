@@ -14,6 +14,9 @@ object LinkState {
     val running = mutableStateOf(false)
     /** Como en Prefs, para la pantalla: se cambian por LinkService.setPcLink / setSyncDevices. */
     val pcLink = mutableStateOf(false)
+    /** El mosaico de PC Link en el panel rapido (ver Prefs.tileAdded); [tileNote], lo que dijo Android al pedirlo. */
+    val tileAdded = mutableStateOf(false)
+    val tileNote = mutableStateOf<String?>(null)
     val syncDevices = mutableStateOf(true)
     val address = mutableStateOf("")
     val pairingCode = mutableStateOf<String?>(null)

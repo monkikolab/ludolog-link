@@ -226,7 +226,7 @@ class HttpServer(
                     val peerId = r.query["peer_id"]?.takeIf { it.matches(SAFE_ID) }
                     val back = r.query["back"]
                     if (!peerId.isNullOrEmpty() && !back.isNullOrEmpty()) {
-                        Peers.save(ctx, Peer(peerId, pc, r.remote, r.query["peer_port"]?.toIntOrNull() ?: Protocol.HTTP_PORT, back, t))
+                        Peers.save(ctx, Peer(peerId, pc, r.remote, r.query["peer_port"]?.toIntOrNull() ?: Dev.httpPort, back, t))
                         LinkService.ensure(ctx)
                         LinkState.addLog("Paired with $pc", "pairing")
                     }
@@ -250,7 +250,7 @@ class HttpServer(
                     r.method == "POST" && r.path == "/pair/introduce" -> {
                         val id = r.query["id"]?.takeIf { it.matches(SAFE_ID) } ?: return respond(out, 400, err("bad id"))
                         if (id == deviceId) return respond(out, 400, err("that's this device"))
-                        val port = r.query["port"]?.toIntOrNull() ?: Protocol.HTTP_PORT
+                        val port = r.query["port"]?.toIntOrNull() ?: Dev.httpPort
                         val t = runCatching {
                             Introduce.accept(ctx, from, id, r.query["name"]?.take(40).orEmpty().ifBlank { "Device" },
                                 r.query["host"].orEmpty(), port, r.query["token"]?.ifBlank { null })

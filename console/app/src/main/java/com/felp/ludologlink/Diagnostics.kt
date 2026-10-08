@@ -53,10 +53,10 @@ object Diagnostics {
     }
 
     private fun info(ctx: Context): String = buildString {
-        appendLine("Ludolog Link ${BuildInfo.VERSION}")
+        appendLine("${Dev.name} ${BuildInfo.VERSION}")
         appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE}), named «${Prefs.deviceName(ctx)}»")
         appendLine("Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
-        val ludolog = runCatching { ctx.packageManager.getPackageInfo("com.felp.frontcomp", 0).versionName }.getOrNull()
+        val ludolog = runCatching { ctx.packageManager.getPackageInfo(Ludolog.PACKAGE, 0).versionName }.getOrNull()
         appendLine("Ludolog: ${ludolog ?: "not installed"}")
         appendLine("ROM folder: ${Prefs.romsRoot(ctx) ?: "not set"}")
         appendLine("PC Link: ${if (Prefs.pcLink(ctx)) "on" else "off"}, sync between devices: ${if (Prefs.syncDevices(ctx)) "on" else "off"}")

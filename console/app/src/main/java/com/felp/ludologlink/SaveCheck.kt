@@ -127,6 +127,6 @@ class SaveCheckProvider : ContentProvider() {
     override fun update(uri: Uri, values: ContentValues?, s: String?, a: Array<out String>?) = 0
 
     companion object {
-        const val PERMISSION = "com.felp.frontcomp.permission.LINK"
+        const val PERMISSION = BuildConfig.LUDOLOG_PACKAGE + ".permission.LINK"
     }
 }

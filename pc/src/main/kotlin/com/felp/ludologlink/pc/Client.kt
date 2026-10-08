@@ -107,7 +107,7 @@ object Discovery {
             while (System.currentTimeMillis() < deadline) {
                 if (System.currentTimeMillis() >= nextSend) {     // repetir: el UDP se pierde
                     for (t in targets()) {
-                        runCatching { s.send(DatagramPacket(query, query.size, t, Protocol.DISCOVERY_PORT)) }
+                        runCatching { s.send(DatagramPacket(query, query.size, t, Dev.discoveryPort)) }
                     }
                     nextSend = System.currentTimeMillis() + 500
                 }
@@ -124,7 +124,7 @@ object Discovery {
                     name = j.optString("name", j.optString("model")),
                     model = j.optString("model"),
                     host = p.address.hostAddress,
-                    port = j.optInt("port", Protocol.HTTP_PORT),
+                    port = j.optInt("port", Dev.httpPort),
                     version = j.optString("version"),
                     // Las de antes no lo dicen: atendian siempre.
                     pcLink = j.optBoolean("pcLink", true),

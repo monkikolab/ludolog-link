@@ -115,8 +115,8 @@ fun GamesView(app: AppState, window: java.awt.Window) {
             delay(10_000)
         }
     }
-    val catPath = PcCatalog.configured?.path?.lowercase()
-    val downloads = app.transfers.items.count { !it.upload && it.state == TState.DONE && catPath != null && it.local.path.lowercase().startsWith(catPath) }
+    val catPath = PcCatalog.configured.path.lowercase()
+    val downloads = app.transfers.items.count { !it.upload && it.state == TState.DONE && it.local.path.lowercase().startsWith(catPath) }
     var lastVersion by remember { mutableIntStateOf(-1) }
     val scan by produceState<PcCatalog.Scan?>(null, present, version, downloads) {
         // Una tanda de descargas no relee la carpeta una vez por archivo.
@@ -215,14 +215,14 @@ fun GamesView(app: AppState, window: java.awt.Window) {
         anchor = r.key
     }
 
-    /** Bajar al PC: cada archivo desde un device que lo tiene, a la misma carpeta. */
+    /**
+     * Bajar al PC: cada archivo desde un device que lo tiene, a la carpeta de juegos bajados (Settings,
+     * This PC). Antes se preguntaba cada vez; ahora va alli directo y el aviso dice donde.
+     */
     fun downloadAll(groups: Map<ConsoleEntry, List<RomFile>>) {
         if (groups.values.all { it.isEmpty() }) return
-        scope.launch {
-            val dir = chooseFolder(window, Config.folder("download_dir")) ?: return@launch
-            Config.setFolder("download_dir", dir)
-            for ((d, files) in groups) if (files.isNotEmpty()) app.download(d, files, dir)
-        }
+        val dir = Config.downloadDir.apply { mkdirs() }
+        for ((d, files) in groups) if (files.isNotEmpty()) app.download(d, files, dir)
     }
 
     fun download(d: ConsoleEntry, files: List<RomFile>) = downloadAll(mapOf(d to files))
@@ -282,7 +282,7 @@ fun GamesView(app: AppState, window: java.awt.Window) {
         }
         // Donde esta el catalogo del PC, si no se ve.
         val configured = PcCatalog.configured
-        if (scan == null && configured != null) Text("PC catalog not found: ${configured.absolutePath}",
+        if (scan == null) Text("PC catalog not found: ${configured.absolutePath}",
             style = MaterialTheme.typography.bodySmall, color = Look.warn)
 
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

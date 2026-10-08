@@ -203,6 +203,8 @@ val buildInstaller by tasks.registering(Exec::class) {
         "--name", "Ludolog Link", "--app-version", appVersion, "--vendor", "monkikolab",
         "--description", "Ludolog Link: your handhelds' games, saves, Companion and Ludolog settings, from the PC",
         "--win-per-user-install", "--win-menu", "--win-menu-group", "Ludolog", "--win-shortcut",
+        // El asistente con sus ventanas (ver msi/main.wxs). Sin esto no hay ninguna.
+        "--win-dir-chooser",
         // El mismo que packageMsi (ver nativeDistributions): una version nueva reemplaza a la anterior.
         "--win-upgrade-uuid", "71be5483-0abe-407a-a5a5-9f89eb867c09",
     )
@@ -211,6 +213,8 @@ val buildInstaller by tasks.registering(Exec::class) {
 val buildPortable by tasks.registering(Zip::class) {
     dependsOn("createDistributable")
     from(appImage) { into("Ludolog Link") }
+    // La marca de portable: con ella guarda todo en data\ a su lado y no en %APPDATA% (ver PcDirs).
+    from(project.file("portable")) { into("Ludolog Link") }
     destinationDirectory.set(releaseDir)
     archiveFileName.set("ludolog-link-pc-$appVersion-portable.zip")
 }

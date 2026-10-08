@@ -18,7 +18,7 @@ import java.io.File
  * (LinkBridge, permiso de firma). El contrato esta en ludolog-front-end/docs/ludolog-link.md.
  */
 object Ludolog {
-    const val PACKAGE = "com.felp.frontcomp"
+    const val PACKAGE = BuildConfig.LUDOLOG_PACKAGE
     private const val ACTION_LIBRARY_CHANGED = "com.felp.frontcomp.link.LIBRARY_CHANGED"
     private const val ACTION_MOVED = "com.felp.frontcomp.link.MOVED"
     private const val ACTION_CONFIG_CHANGED = "com.felp.frontcomp.link.CONFIG_CHANGED"
@@ -32,7 +32,7 @@ object Ludolog {
 
     /** `<volumen>/Ludolog`, la que tenga config.xml. Ludolog guarda cual eligio en privado. */
     fun dataDir(ctx: Context): File? =
-        RomStore.volumePaths(ctx).map { File(it, "Ludolog") }.firstOrNull { File(it, "config.xml").isFile }
+        RomStore.volumePaths(ctx).map { File(it, BuildConfig.LUDOLOG_DATA) }.firstOrNull { File(it, "config.xml").isFile }
 
     /** config.xml como mapa. Es el XML de SharedPreferences: string, int, long, float, boolean y set. */
     fun config(dir: File): Map<String, Any> {

@@ -41,7 +41,7 @@ data class Peer(
         .put("token", token).put("back", backToken).put("last", lastSync).put("note", note)
 
     companion object {
-        fun of(j: JSONObject) = Peer(j.getString("id"), j.optString("name"), j.optString("host"), j.optInt("port", Protocol.HTTP_PORT),
+        fun of(j: JSONObject) = Peer(j.getString("id"), j.optString("name"), j.optString("host"), j.optInt("port", Dev.httpPort),
             j.optString("token"), j.optString("back"), j.optLong("last"), j.optString("note"))
     }
 }
@@ -115,7 +115,7 @@ object Peers {
                 NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
                     .flatMap { it.interfaceAddresses }.mapNotNull { it.broadcast }.forEach { add(it) }
             }
-            for (t in targets) runCatching { s.send(DatagramPacket(msg, msg.size, t, Protocol.DISCOVERY_PORT)) }
+            for (t in targets) runCatching { s.send(DatagramPacket(msg, msg.size, t, Dev.discoveryPort)) }
             val until = System.currentTimeMillis() + waitMs
             val buf = ByteArray(1024)
             while (System.currentTimeMillis() < until) {
@@ -126,7 +126,7 @@ object Peers {
                     val id = j.optString("id")
                     if (j.optString("app") != Protocol.APP || id.isEmpty() || id == me) continue
                     found[id] = FoundConsole(id, j.optString("name", "Device"), p.address.hostAddress ?: continue,
-                        j.optInt("port", Protocol.HTTP_PORT))
+                        j.optInt("port", Dev.httpPort))
                 } catch (_: SocketTimeoutException) {
                 }
             }
@@ -175,7 +175,7 @@ object Peers {
         try {
             val j = json(open(f.host, f.port, "POST", "/pair/confirm", mapOf(
                 "code" to code.filter(Char::isDigit), "pc" to Prefs.deviceName(ctx),
-                "peer_id" to myId(ctx), "peer_port" to Protocol.HTTP_PORT.toString(), "back" to back,
+                "peer_id" to myId(ctx), "peer_port" to Dev.httpPort.toString(), "back" to back,
             )))
             val p = Peer(f.id, f.name, f.host, f.port, j.getString("token"), back)
             save(ctx, p)

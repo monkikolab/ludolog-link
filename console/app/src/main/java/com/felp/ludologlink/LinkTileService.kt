@@ -32,6 +32,11 @@ class LinkTileService : TileService() {
         }
     }
 
+    // Para que la app sepa si el mosaico esta puesto, se lo pongan desde ella o a mano.
+    override fun onTileAdded() { Prefs.setTileAdded(this, true) }
+
+    override fun onTileRemoved() { Prefs.setTileAdded(this, false) }
+
     override fun onStartListening() {
         live = this
         update()

@@ -21,6 +21,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import java.io.File
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -263,28 +265,53 @@ private fun PcSettings(app: AppState, e: ConsoleEntry, window: java.awt.Window) 
             Fact("Name", Config.pcName)
             Text("How devices see this PC.", style = MaterialTheme.typography.bodySmall, color = MenuDim)
             Spacer(Modifier.height(8.dp))
-            Fact("Backups", Config.backupRoot.absolutePath)
-            LTextButton(onClick = { runCatching { Config.backupRoot.mkdirs(); java.awt.Desktop.getDesktop().open(Config.backupRoot) } }) {
-                Text("Open backups folder")
-            }
-            Fact("Downloads go to", Config.folder("download_dir")?.absolutePath ?: "asked each time")
-            Spacer(Modifier.height(8.dp))
-            // El catalogo: juegos guardados en este PC, ordenados como en los devices (ver PcCatalog).
-            var catalog by remember { mutableStateOf(PcCatalog.configured) }
-            val here = remember(catalog) { runCatching { catalog?.isDirectory == true }.getOrDefault(false) }
-            Fact("PC catalog", catalog?.absolutePath ?: "not set")
-            if (catalog != null && !here) Text("Not found. Is its drive connected?",
-                style = MaterialTheme.typography.bodySmall, color = Look.warn)
-            Text("Games kept on this PC, one folder per console.", style = MaterialTheme.typography.bodySmall, color = MenuDim)
+            // Las carpetas de Link en este PC (07-10-2026): todas cambiables, y por defecto dentro de
+            // la de datos, que es la del programa (ver PcDirs y Config.dataRoot).
             val scope = androidx.compose.runtime.rememberCoroutineScope()
-            LTextButton(onClick = {
-                scope.launch {
-                    val d = chooseFolder(window, catalog?.takeIf { it.isDirectory }, "PC catalog folder") ?: return@launch
-                    val made = PcCatalog.choose(d, app.consoles.flatMap { c -> c.consoleDirs.map { it.folder } }.distinct())
-                    catalog = PcCatalog.configured
-                    app.notify(if (made > 0) "PC catalog set. Created $made console folders." else "PC catalog set to ${d.absolutePath}.", about = null, kind = "settings")
+            var revision by remember { mutableStateOf(0) }
+            fun open(f: File) = runCatching { f.mkdirs(); java.awt.Desktop.getDesktop().open(f) }
+            key(revision) {
+                FolderFact("Data folder", Config.dataRoot,
+                    "Where Link keeps backups, downloaded games and the PC catalog, unless you move one of them.")
+                Row {
+                    LTextButton(onClick = {
+                        scope.launch {
+                            val d = chooseFolder(window, Config.dataRoot.takeIf { it.isDirectory }, "Data folder") ?: return@launch
+                            Config.dataRoot = d
+                            revision++
+                            app.notify("Data folder set to ${d.absolutePath}. What was in the old one stays there.", about = null, kind = "settings")
+                        }
+                    }) { Text("Change…") }
+                    LTextButton(onClick = { open(Config.dataRoot) }) { Text("Open") }
                 }
-            }) { Text(if (catalog == null) "Choose catalog folder…" else "Change catalog folder…") }
+                FolderFact("Backups", Config.backupRoot, "A copy of Ludolog's folder from each device, and its snapshots.")
+                LTextButton(onClick = { open(Config.backupRoot) }) { Text("Open backups folder") }
+                FolderFact("Downloaded games", Config.downloadDir, "Games you download from a device go here.")
+                Row {
+                    LTextButton(onClick = {
+                        scope.launch {
+                            val d = chooseFolder(window, Config.downloadDir.takeIf { it.isDirectory }, "Downloaded games folder") ?: return@launch
+                            Config.downloadDir = d
+                            revision++
+                        }
+                    }) { Text("Change…") }
+                    LTextButton(onClick = { open(Config.downloadDir) }) { Text("Open") }
+                }
+                // El catalogo: juegos guardados en este PC, ordenados como en los devices (ver PcCatalog).
+                val catalog = PcCatalog.configured
+                val here = remember(catalog) { runCatching { catalog.isDirectory || PcCatalog.dir != null }.getOrDefault(false) }
+                FolderFact("PC catalog", catalog, "Games kept on this PC, one folder per console, with their box art and videos.")
+                if (!here) Text("Not found. Is its drive connected?",
+                    style = MaterialTheme.typography.bodySmall, color = Look.warn)
+                LTextButton(onClick = {
+                    scope.launch {
+                        val d = chooseFolder(window, catalog.takeIf { it.isDirectory }, "PC catalog folder") ?: return@launch
+                        val made = PcCatalog.choose(d, app.consoles.flatMap { c -> c.consoleDirs.map { it.folder } }.distinct())
+                        revision++
+                        app.notify(if (made > 0) "PC catalog set. Created $made console folders." else "PC catalog set to ${d.absolutePath}.", about = null, kind = "settings")
+                    }
+                }) { Text("Change catalog folder…") }
+            }
             Spacer(Modifier.height(12.dp))
             Text(Look.title(e.name), style = MaterialTheme.typography.titleSmall, color = MenuInk)
             Text("Remove this PC on the device too.",
@@ -391,4 +418,11 @@ private fun ConsoleSettings(app: AppState, e: ConsoleEntry) {
 @Composable
 private fun ColumnScope.Section(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), content = content)
+}
+
+/** Una carpeta en Settings: su nombre, donde esta y para que es. */
+@Composable
+private fun FolderFact(label: String, f: File, what: String) {
+    Fact(label, f.absolutePath)
+    Text(what, style = MaterialTheme.typography.bodySmall, color = MenuDim)
 }

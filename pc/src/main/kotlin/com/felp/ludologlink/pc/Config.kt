@@ -8,13 +8,25 @@ import java.net.InetAddress
 data class Known(val id: String, val name: String, val model: String, val host: String, val port: Int, val token: String)
 
 /**
- * %APPDATA%\LudologLink\config.json. Distinta de la del ROM Renamer
- * (%APPDATA%\ROMManager): son apps distintas y no comparten nada.
+ * config.json en PcDirs.home: %APPDATA%\LudologLink en la instalada, data\ junto al .exe en la
+ * portable. Distinta de la del ROM Renamer (%APPDATA%\ROMManager): son apps distintas y no
+ * comparten nada.
  */
 object Config {
-    private val dir = File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "LudologLink")
+    private val dir = PcDirs.home
     private val file = File(dir, "config.json")
-    private var data = load()
+    private var data = load().also(::keepOldBackups)
+
+    /**
+     * Los respaldos iban por defecto a Documentos\Ludolog Link. Ahora van a la carpeta de datos
+     * (07-10-2026); en un PC que ya los tenia alli, esa carpeta se queda apuntada como la suya, para
+     * que no desaparezcan de la vista. La portable empieza siempre en la suya.
+     */
+    private fun keepOldBackups(j: JSONObject) {
+        if (PcDirs.portable || Dev.ON || j.optString("backup_root").isNotEmpty()) return
+        val old = File(System.getProperty("user.home"), "Documents/Ludolog Link")
+        if (old.listFiles().orEmpty().isNotEmpty()) j.put("backup_root", old.absolutePath)
+    }
 
     /**
      * Si no se pudo leer un config.json que existe (bloqueado por un antivirus o OneDrive, o roto):
@@ -58,7 +70,7 @@ object Config {
         return c.keys().asSequence().map { id ->
             val j = c.getJSONObject(id)
             Known(id, j.optString("name"), j.optString("model"), j.optString("host"),
-                j.optInt("port", com.felp.ludolog.kit.Protocol.HTTP_PORT), j.optString("token"))
+                j.optInt("port", Dev.httpPort), j.optString("token"))
         }.filter { it.token.isNotEmpty() }.sortedBy { it.name.lowercase() }.toList()
     }
 
@@ -81,13 +93,31 @@ object Config {
         @Synchronized set(v) { data.put("look", v); save() }
 
     /**
+     * La carpeta de datos: donde van, si no se eligio otro sitio para cada uno, los respaldos, los
+     * juegos bajados y el catalogo de ROMs del PC. Por defecto la del programa (PcDirs.home); se
+     * cambia en Settings (pedido del usuario, 07-10-2026). Lo que ya habia en la de antes se queda alli.
+     */
+    var dataRoot: File
+        @Synchronized get() = data.optString("data_dir").takeIf { it.isNotEmpty() }?.let(::File) ?: PcDirs.home
+        @Synchronized set(v) { data.put("data_dir", v.absolutePath); save() }
+
+    /**
      * Donde van los respaldos: la copia de la carpeta de Ludolog de cada consola y sus
-     * instantaneas. Por defecto en Documentos, donde uno busca sus copias; se cambia en Settings.
+     * instantaneas. En la carpeta de datos (antes, en Documentos: ver keepOldBackups).
      */
     var backupRoot: File
         @Synchronized get() = data.optString("backup_root").takeIf { it.isNotEmpty() }?.let(::File)
-            ?: File(System.getProperty("user.home"), "Documents/Ludolog Link")
+            ?: File(dataRoot, "backups")
         @Synchronized set(v) { data.put("backup_root", v.absolutePath); save() }
+
+    /**
+     * Donde van los juegos que se bajan de un device: en la carpeta de datos, salvo que se elija
+     * otra en Settings. Antes se preguntaba en cada descarga y Settings solo lo ensenaba.
+     */
+    var downloadDir: File
+        @Synchronized get() = data.optString("download_dir").takeIf { it.isNotEmpty() }?.let(::File)
+            ?: File(dataRoot, "downloads")
+        @Synchronized set(v) { data.put("download_dir", v.absolutePath); save() }
 
     /** Lo de cada consola en este PC: su copia de la carpeta de datos de Ludolog y sus instantaneas. */
     fun consoleDir(id: String) = File(backupRoot, id)

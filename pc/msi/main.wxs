@@ -116,6 +116,17 @@
 
     <UIRef Id="JpUI"/>
 
+    <!-- Ludolog Link: el asistente (bienvenida, carpeta, listo, terminado; reparar o quitar si ya
+         esta) sale de la opcion win-dir-chooser de jpackage (build.gradle.kts). Sin el, el instalador decia «gathering
+         information» y se cerraba sin decir nada (07-10-2026). Al terminar, una casilla marcada para
+         abrir la app; solo en una instalacion nueva o una actualizacion, no al reparar. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open Ludolog Link" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomAction Id="LudologOpen" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]Ludolog Link.exe&quot;" Return="asyncNoWait" />
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LudologOpen">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+    </UI>
+
     <InstallExecuteSequence>
       <Custom Action="JpSetARPINSTALLLOCATION" After="CostFinalize">Not Installed</Custom>
       <Custom Action="JpSetARPCOMMENTS" After="CostFinalize">Not Installed</Custom>

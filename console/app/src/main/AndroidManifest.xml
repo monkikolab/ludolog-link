@@ -25,13 +25,13 @@
          Ludolog, para que funcione la instale quien la instale primero.
          Contrato en ludolog-front-end/docs/ludolog-link.md. -->
     <permission
-        android:name="com.felp.frontcomp.permission.LINK"
+        android:name="${ludologPackage}.permission.LINK"
         android:protectionLevel="signature" />
-    <uses-permission android:name="com.felp.frontcomp.permission.LINK" />
+    <uses-permission android:name="${ludologPackage}.permission.LINK" />
 
     <!-- Ver si Ludolog esta instalada y que version (Android 11+ esconde los paquetes). -->
     <queries>
-        <package android:name="com.felp.frontcomp" />
+        <package android:name="${ludologPackage}" />
         <!-- La app de ajustes del limpiador de procesos de algunas consolas: cierra Link si no esta en sus excepciones (ver Background). -->
         <package android:name="com.rp.settings" />
         <!-- Las apps instaladas, para elegir emuladores en la pestaña de partidas guardadas. -->
@@ -45,7 +45,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="Ludolog Link"
+        android:label="${appLabel}"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
@@ -65,7 +65,7 @@
         <service
             android:name=".LinkService"
             android:exported="true"
-            android:permission="com.felp.frontcomp.permission.LINK"
+            android:permission="${ludologPackage}.permission.LINK"
             android:foregroundServiceType="dataSync|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
@@ -86,7 +86,7 @@
             android:name=".LinkTileService"
             android:exported="true"
             android:icon="@drawable/ic_tile"
-            android:label="Ludolog Link"
+            android:label="${appLabel}"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
@@ -98,8 +98,8 @@
         <!-- Ludolog pregunta aqui, antes de abrir un juego, si hay una partida mas nueva en otro device (ver SaveCheck). -->
         <provider
             android:name=".SaveCheckProvider"
-            android:authorities="com.felp.ludologlink.savecheck"
+            android:authorities="${applicationId}.savecheck"
             android:exported="true"
-            android:permission="com.felp.frontcomp.permission.LINK" />
+            android:permission="${ludologPackage}.permission.LINK" />
     </application>
 </manifest>

@@ -33,6 +33,18 @@ object Prefs {
     fun setPcLink(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("pc_link", on).apply()
 
     /**
+     * Si el mosaico de PC Link esta en el panel rapido: lo dicen Android al pedirlo y el propio
+     * mosaico al ponerlo o quitarlo (LinkTileService). Con eso el boton «Add tile» deja paso a un
+     * «Added» en vez de seguir ofreciendo lo que ya esta (07-10-2026).
+     */
+    fun tileAdded(ctx: Context): Boolean = prefs(ctx).getBoolean("tile_added", false)
+
+    fun setTileAdded(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean("tile_added", on).apply()
+        LinkState.post { LinkState.tileAdded.value = on }
+    }
+
+    /**
      * Compartir con mis devices (partidas, Companion, ROMs entre consolas). Lo decide la persona y
      * casi nunca se toca: apagado no viaja nada entre consolas, pero lo jugado se sigue apuntando
      * (played.tsv de Ludolog, el cuaderno) y al volver a encenderlo se pone al dia. Antes de jugar,

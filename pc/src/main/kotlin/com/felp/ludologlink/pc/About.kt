@@ -79,6 +79,6 @@ object PcDiagnostics {
         appendLine("Processors: ${Runtime.getRuntime().availableProcessors()}, max memory: ${Runtime.getRuntime().maxMemory() / (1 shl 20)} MB")
         appendLine("Paired devices: ${Config.known().size}")
         appendLine("Backups: ${Config.backupRoot.absolutePath}")
-        appendLine("PC catalog: ${PcCatalog.configured?.absolutePath ?: "not set"}")
+        appendLine("PC catalog: ${PcCatalog.configured.absolutePath}")
     }
 }

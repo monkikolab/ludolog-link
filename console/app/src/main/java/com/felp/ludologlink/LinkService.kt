@@ -206,8 +206,8 @@ class LinkService : Service(), TransferHooks {
     private fun startAll() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Ludolog Link", NotificationManager.IMPORTANCE_LOW))
-        val address = "${wifiAddress()}:${Protocol.HTTP_PORT}"
+            NotificationChannel(CHANNEL, Dev.name, NotificationManager.IMPORTANCE_LOW))
+        val address = "${wifiAddress()}:${Dev.httpPort}"
         LinkState.post { LinkState.address.value = address }
         // Android puede negarlo: con la app en segundo plano, sin una excepcion que lo permita.
         // Sin esto, la app se caia.
@@ -233,9 +233,9 @@ class LinkService : Service(), TransferHooks {
 
         val id = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "desconocido"
         try {
-            http = HttpServer(applicationContext, Protocol.HTTP_PORT, id, this).also { it.start() }
+            http = HttpServer(applicationContext, Dev.httpPort, id, this).also { it.start() }
         } catch (e: Exception) {
-            LinkState.addLog("Couldn't open port ${Protocol.HTTP_PORT}: ${e.message}", "link", error = true)
+            LinkState.addLog("Couldn't open port ${Dev.httpPort}: ${e.message}", "link", error = true)
             stopSelf()
             return
         }
@@ -249,10 +249,10 @@ class LinkService : Service(), TransferHooks {
         registerReceiver(companionReceiver, android.content.IntentFilter().apply {
             addAction("com.felp.frontcomp.link.COMPANION_CHANGED"); addAction("com.felp.frontcomp.link.EDITS_CHANGED")
         },
-            "com.felp.frontcomp.permission.LINK", null, Context.RECEIVER_EXPORTED)
+            SaveCheckProvider.PERMISSION, null, Context.RECEIVER_EXPORTED)
         registerReceiver(gameReceiver, android.content.IntentFilter().apply {
             addAction("com.felp.frontcomp.link.GAME_OPENED"); addAction("com.felp.frontcomp.link.GAME_CLOSED")
-        }, "com.felp.frontcomp.permission.LINK", null, Context.RECEIVER_EXPORTED)
+        }, SaveCheckProvider.PERMISSION, null, Context.RECEIVER_EXPORTED)
         handler.postDelayed(backupTick, 60_000)
         kotlin.concurrent.thread(isDaemon = true) { runCatching { RomStore.dropStaleParts(this) } }
         // Al encenderse, ponerse al dia: lo jugado aqui y alla mientras no escuchaba.
@@ -309,7 +309,7 @@ class LinkService : Service(), TransferHooks {
             DatagramSocket(null).apply {
                 reuseAddress = true
                 broadcast = true
-                bind(InetSocketAddress(Protocol.DISCOVERY_PORT))
+                bind(InetSocketAddress(Dev.discoveryPort))
             }
         } catch (e: Exception) {
             LinkState.addLog("Discovery disabled: ${e.message}", "link", error = true)
@@ -329,7 +329,7 @@ class LinkService : Service(), TransferHooks {
                     val reply = JSONObject()
                         .put("app", Protocol.APP).put("version", BuildInfo.VERSION).put("id", id)
                         .put("name", Prefs.deviceName(applicationContext))
-                        .put("model", android.os.Build.MODEL).put("port", Protocol.HTTP_PORT)
+                        .put("model", android.os.Build.MODEL).put("port", Dev.httpPort)
                         .put("pcLink", pcOn)
                         .toString().toByteArray(Charsets.UTF_8)
                     sock.send(DatagramPacket(reply, reply.size, p.socketAddress))
@@ -417,7 +417,7 @@ class LinkService : Service(), TransferHooks {
             PendingIntent.FLAG_IMMUTABLE)
         val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_tile)
-            .setContentTitle("Ludolog Link")
+            .setContentTitle(Dev.name)
             .setContentText(text)
             .setOngoing(true)
             .setContentIntent(open)

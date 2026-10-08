@@ -23,7 +23,7 @@ class ConsoleEntry(val id: String) {
     var name by mutableStateOf("")
     var model by mutableStateOf("")
     var host by mutableStateOf("")
-    var port by mutableStateOf(Protocol.HTTP_PORT)
+    var port by mutableStateOf(Dev.httpPort)
     var token by mutableStateOf<String?>(null)
     /** null = sin comprobar todavia. */
     var online by mutableStateOf<Boolean?>(null)
@@ -1322,10 +1322,30 @@ class AppState(private val scope: CoroutineScope) {
                 Config.remember(e.toKnown())
                 pairing = null
                 notify("Paired with ${e.name}", about = e, kind = "pairing")
+                replaceOld(e)
                 load(e)
             } catch (x: LinkError) {
                 onError(x.message ?: "error")
             }
+        }
+    }
+
+    /**
+     * La misma consola de antes de reinstalar Link. Al reinstalarlo cambia de identidad, y el PC la
+     * ensenaba dos veces: la vieja, «not visible», y la nueva, «not paired» (07-10-2026). Al emparejar
+     * la nueva, una emparejada que no contesta, del mismo modelo y en la misma direccion, se da por
+     * ella: se olvida, y sus respaldos pasan a la nueva si esta todavia no tiene.
+     */
+    private fun replaceOld(e: ConsoleEntry) {
+        val old = consoles.filter { it !== e && it.id != e.id && it.paired && it.online != true && it.model == e.model && it.host == e.host }
+        for (o in old) {
+            val from = Config.consoleDir(o.id)
+            val to = Config.consoleDir(e.id)
+            if (from.isDirectory && !to.exists()) runCatching { from.renameTo(to) }
+            Config.forget(o.id)
+            consoles.remove(o)
+            if (selectedId == o.id) selectedId = e.id
+            notify("The old ${o.name.ifBlank { o.model }} was this device before Link was reinstalled: replaced.", about = e, kind = "pairing")
         }
     }
 

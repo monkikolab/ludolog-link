@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        LinkState.tileAdded.value = Prefs.tileAdded(this)
         updates = Prefs.updateCheck(this)
         latest = Prefs.updateLatest(this)
         // Una vez al dia como mucho, si hay version nueva en GitHub: se dice una vez en la actividad
@@ -251,8 +252,9 @@ class MainActivity : ComponentActivity() {
                     Text("Quick settings tile for PC Link.",
                         Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    LOutlinedButton(onClick = { addTile() }) { Text("Add tile") }
+                    TileButton { addTile() }
                 }
+                LinkState.tileNote.value?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             Spacer(Modifier.size(4.dp))
             Text("Check for updates")
@@ -305,7 +307,7 @@ class MainActivity : ComponentActivity() {
     private fun AboutDialog() {
         AlertDialog(
             onDismissRequest = { about = false },
-            title = { Text("Ludolog Link") },
+            title = { Text(Dev.name) },
             text = {
                 // El banner, bajo, y todo desplazable: en una pantalla apaisada el dialogo es corto, y a
                 // todo lo ancho el banner dejaba fuera los botones.
@@ -368,14 +370,21 @@ class MainActivity : ComponentActivity() {
     private fun addTile() {
         if (Build.VERSION.SDK_INT < 33) return
         val sb = getSystemService(android.app.StatusBarManager::class.java) ?: return
-        sb.requestAddTileService(android.content.ComponentName(this, LinkTileService::class.java), "Ludolog Link",
-            android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_tile), mainExecutor) { result ->
-            LinkState.addLog(when (result) {
+        sb.requestAddTileService(android.content.ComponentName(this, LinkTileService::class.java), Dev.name,
+            android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_tile),             mainExecutor) { result ->
+            // Lo que paso, tambien a la vista: solo iba al registro, y el boton seguia diciendo
+            // «Add tile» como si nada (07-10-2026).
+            val added = result == android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ||
+                result == android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED
+            if (added) Prefs.setTileAdded(this, true)
+            val note = when (result) {
                 android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Quick settings tile added"
                 android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "The quick settings tile is already there"
                 android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "Tile not added"
                 else -> "Couldn't add the tile ($result)"
-            })
+            }
+            LinkState.addLog(note)
+            LinkState.tileNote.value = if (added) null else "$note. Try again, or add it by editing the quick settings panel."
         }
     }
 
@@ -443,7 +452,7 @@ class MainActivity : ComponentActivity() {
                 Modifier.fillMaxSize().verticalScroll(scroll).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text(Look.title("Ludolog Link"), style = MaterialTheme.typography.headlineMedium)
+                Text(Look.title(Dev.name), style = MaterialTheme.typography.headlineMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(nickname, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)

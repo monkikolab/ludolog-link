@@ -69,7 +69,7 @@ fun SetupWizard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(Look.title("Ludolog Link"), style = MaterialTheme.typography.headlineMedium)
+            Text(Look.title(Dev.name), style = MaterialTheme.typography.headlineMedium)
             // En un telefono en vertical no caben: se desplazan, sin partirse letra a letra.
             Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 steps.forEachIndexed { i, s ->
@@ -213,8 +213,22 @@ private fun Done(onAddTile: (() -> Unit)?) {
             if (onAddTile != null) Row(verticalAlignment = Alignment.CenterVertically) {
                 Hint("Quick settings tile for PC Link.", Modifier.weight(1f))
                 Spacer(Modifier.size(8.dp))
-                LOutlinedButton(onClick = onAddTile) { Text("Add tile") }
+                TileButton(onAddTile)
             }
+            LinkState.tileNote.value?.let { Hint(it) }
         }
+    }
+}
+
+/**
+ * El boton del mosaico de PC Link: «Add tile» mientras no este en el panel rapido y «✓ Added»
+ * cuando ya esta. Antes seguia diciendo «Add tile» despues de ponerlo, sin decir nada (07-10-2026).
+ */
+@Composable
+internal fun TileButton(onAdd: () -> Unit) {
+    if (LinkState.tileAdded.value) {
+        Text("✓ Added", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+    } else {
+        LOutlinedButton(onClick = onAdd) { Text("Add tile") }
     }
 }

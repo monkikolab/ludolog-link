@@ -13,7 +13,8 @@ import java.io.File
  *   <carpeta>/<consola>/<ROMs>                         (gba, psx... como en los devices)
  *   <carpeta>/media/<consola>/covers|videos/<nombre>   (como `media/` de Ludolog)
  *
- * Se elige en Settings. Ver CatalogView.
+ * Por defecto `roms` en la carpeta de datos (07-10-2026; antes no habia hasta elegir una), y se
+ * cambia en Settings. Ver CatalogView.
  */
 object PcCatalog {
 
@@ -25,10 +26,12 @@ object PcCatalog {
      * catalogo se da por ausente (sin error) y vuelve solo al reconectarlo (CatalogView lo mira
      * cada pocos segundos).
      */
-    val configured: File? get() = Config.path(KEY)?.let(::File)
+    val configured: File get() = Config.path(KEY)?.let(::File) ?: File(Config.dataRoot, "roms")
 
-    /** La carpeta, solo si esta ahora. */
-    val dir: File? get() = configured?.takeIf { runCatching { it.isDirectory }.getOrDefault(false) }
+    /** La carpeta, solo si esta ahora. La de por defecto se crea al pedirla: es de la app. */
+    val dir: File? get() = configured
+        .also { if (Config.path(KEY) == null) runCatching { File(it, MEDIA).mkdirs() } }
+        .takeIf { runCatching { it.isDirectory }.getOrDefault(false) }
 
     /**
      * Usar [d] como catalogo. Si esta vacia, se crean las carpetas de las consolas (las de los

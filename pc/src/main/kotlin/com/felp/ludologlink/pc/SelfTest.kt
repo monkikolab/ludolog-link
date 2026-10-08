@@ -10,7 +10,7 @@ import kotlin.random.Random
  * Usar con la consola apuntando a una carpeta de pruebas.
  */
 fun selfTest(host: String, token: String) {
-    val l = Link(host, com.felp.ludolog.kit.Protocol.HTTP_PORT, token)
+    val l = Link(host, Dev.httpPort, token)
     var fails = 0
     fun check(what: String, ok: Boolean, detail: String = "") {
         println((if (ok) "PASS " else "FAIL ") + what + if (detail.isNotEmpty()) " — $detail" else "")
