@@ -2,6 +2,8 @@
 
 # Ludolog Link
 
+[![Build](https://github.com/monkikolab/ludolog-link/actions/workflows/build.yml/badge.svg)](https://github.com/monkikolab/ludolog-link/actions/workflows/build.yml)
+
 **v0.5.2** · The companion of [Ludolog](https://github.com/monkikolab/ludolog-front-end). It keeps
 your handhelds in sync with each other and with your PC, over your own Wi-Fi.
 

@@ -1,0 +1,37 @@
+# Builds Ludolog Link for Android and compiles the PC app on every push and pull request.
+# Link compiles a few files from Ludolog and takes fonts from ludolog-assets, so both are checked
+# out next to it, as in docs/building.md. Unsigned: release builds are signed locally.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ludolog-link
+      - uses: actions/checkout@v4
+        with:
+          repository: monkikolab/ludolog-front-end
+          path: ludolog-front-end
+      - uses: actions/checkout@v4
+        with:
+          repository: monkikolab/ludolog-assets
+          path: ludolog-assets
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Android app
+        working-directory: ludolog-link/console
+        run: ./gradlew --no-daemon assembleDebug
+      - name: PC app
+        working-directory: ludolog-link/pc
+        run: ./gradlew --no-daemon compileKotlin
