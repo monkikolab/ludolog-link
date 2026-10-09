@@ -11,7 +11,6 @@ import com.felp.frontcomp.Prefs
 import com.felp.frontcomp.ScrapeProgress
 import com.felp.frontcomp.ScrapeReport
 import com.felp.frontcomp.SteamSource
-import com.felp.frontcomp.SwitchSource
 import com.felp.frontcomp.VideoSnaps
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,7 +84,7 @@ internal object PcScraper {
         val scraper = ArtScraper(
             catalog = CompanionReader.catalog(),
             prefs = prefs,
-            sources = listOf(LibretroSource(LibretroThumbnails(cacheDir = cache)), GameTdbSource(), SteamSource(), SwitchSource()),
+            sources = listOf(LibretroSource(LibretroThumbnails(cacheDir = cache)), GameTdbSource(), SteamSource()),
             mediaRoot = stash(e.id),
             snaps = VideoSnaps(cacheDir = cache, clipSeconds = prefs.clipSeconds, keepAudio = prefs.anyThemeHearsVideo,
                 maxHeight = prefs.videoHeight),

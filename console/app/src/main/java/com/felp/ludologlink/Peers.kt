@@ -178,6 +178,10 @@ object Peers {
                 "peer_id" to myId(ctx), "peer_port" to Dev.httpPort.toString(), "back" to back,
             )))
             val p = Peer(f.id, f.name, f.host, f.port, j.getString("token"), back)
+            // La clave que le habiamos dado si ya estaban emparejadas: la nueva la reemplaza, y la
+            // vieja seguia valiendo para siempre (09-10-2026).
+            everyone(ctx).firstOrNull { it.id == f.id }?.backToken
+                ?.takeIf { it.isNotEmpty() && it != back }?.let { Prefs.forgetToken(ctx, it) }
             save(ctx, p)
             Pairing.refresh(ctx)
             LinkService.ensure(ctx)
@@ -214,12 +218,9 @@ object Peers {
             java.security.MessageDigest.isEqual(j.optString("proof").toByteArray(), proof(p.token, nonce, p.id).toByteArray())
     }.getOrDefault(false)
 
-    /** La prueba de que se conoce [secret]: HMAC-SHA256 de [nonce] y del id de quien contesta. */
-    fun proof(secret: String, nonce: String, id: String): String {
-        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
-        mac.init(javax.crypto.spec.SecretKeySpec(secret.toByteArray(), "HmacSHA256"))
-        return mac.doFinal("$nonce|$id".toByteArray()).joinToString("") { "%02x".format(it) }
-    }
+    /** La prueba de que se conoce [secret]: ver Protocol.proof, que el PC calcula igual. */
+    fun proof(secret: String, nonce: String, id: String): String =
+        com.felp.ludolog.kit.Protocol.proof(secret, nonce, id)
 
     /**
      * Como [reach], para cuando alguien espera (antes de jugar): esperas cortas y sin buscarla por la

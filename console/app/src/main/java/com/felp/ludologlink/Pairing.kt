@@ -84,9 +84,12 @@ object Pairing {
         runCatching { nm.notify(NOTIF_ID, n) }
     }
 
-    /** Devuelve el token si el codigo es correcto; null si no. */
+    /**
+     * Devuelve el token si el codigo es correcto; null si no. [owner] es el id fijo del PC (desde la
+     * 0.5.3): con el, los emparejamientos anteriores del mismo PC se olvidan (ver [forgetOlder]).
+     */
     @Synchronized
-    fun confirm(ctx: Context, given: String, pc: String): String? {
+    fun confirm(ctx: Context, given: String, pc: String, owner: String? = null): String? {
         val c = code ?: return null
         if (System.currentTimeMillis() > expires) {
             clear()
@@ -107,11 +110,51 @@ object Pairing {
         clear()
         val bytes = ByteArray(24).also { rnd.nextBytes(it) }
         val token = bytes.joinToString("") { "%02x".format(it) }
-        Prefs.putToken(ctx, token, pc)
+        Prefs.putToken(ctx, token, pc, owner)
+        if (owner != null) forgetOlder(ctx, token, owner, pc)
         refresh(ctx)
         LinkState.addLog("Paired with $pc", "pairing")
         return token
     }
+
+    /**
+     * Un PC con el emparejamiento de antes de la 0.5.3 dice cual es su id (POST /pair/claim, con su
+     * clave, en la direccion de siempre). Desde entonces puede comprobar a esta consola en una IP nueva
+     * sin mandar su clave (ver HttpServer.pingProof), y los emparejamientos viejos suyos se olvidan.
+     * Null si la clave ya es de otro PC; si no, cuantos se olvidaron.
+     */
+    @Synchronized
+    fun claim(ctx: Context, token: String, owner: String, pc: String): Int? {
+        val had = Prefs.tokenOwners(ctx)[token]
+        if (had != null && had != owner) return null
+        if (had == null) Prefs.setOwner(ctx, token, owner)
+        return forgetOlder(ctx, token, owner, pc).also { refresh(ctx) }
+    }
+
+    /**
+     * Olvida los otros emparejamientos del PC [owner] (09-10-2026): cada vez que un PC se emparejaba
+     * de nuevo, por ejemplo tras reinstalar Link en el, sumaba una clave y las viejas seguian valiendo
+     * hasta «Forget» (la RP5 tenia seis de «MSI»). Los suyos con id, y los de antes del id que llevan
+     * su mismo nombre: dos PCs con el mismo nombre y uno sin id es raro, y ese solo tendria que
+     * emparejarse otra vez. Nunca las claves que se dieron a otras consolas.
+     */
+    private fun forgetOlder(ctx: Context, keep: String, owner: String, pc: String): Int {
+        val owners = Prefs.tokenOwners(ctx)
+        val devices = Peers.everyone(ctx).map { it.backToken }.toSet()
+        val gone = Prefs.tokens(ctx).filter { (t, name) ->
+            t != keep && t !in devices && (owners[t] == owner || (owners[t] == null && name == pc))
+        }.keys
+        if (gone.isNotEmpty()) {
+            Prefs.forgetTokens(ctx, gone)
+            LinkState.addLog("Forgot ${gone.size} older pairing${if (gone.size == 1) "" else "s"} of $pc", "pairing")
+        }
+        return gone.size
+    }
+
+    /** La clave del PC [owner], si se emparejo con su id o lo dijo despues. */
+    fun tokenOf(ctx: Context, owner: String): String? =
+        Prefs.tokenOwners(ctx).entries.firstOrNull { it.value == owner }?.key
+            ?.takeIf { Prefs.tokens(ctx).containsKey(it) }
 
     fun isValid(ctx: Context, token: String?): Boolean =
         !token.isNullOrEmpty() && Prefs.tokens(ctx).containsKey(token)

@@ -240,12 +240,21 @@ class AppState(private val scope: CoroutineScope) {
                     e.online = false
                     continue
                 }
-                // Una emparejada que contesta desde otra IP: solo se le cree si esa IP acepta su token.
-                // Cualquiera en la Wi-Fi puede contestar con un id (se ve en la busqueda) y llevarse el token.
+                // Una emparejada que contesta desde otra IP: solo se le cree si prueba conocer la clave de
+                // este PC. Cualquiera en la Wi-Fi puede contestar con un id (se ve en la busqueda); antes
+                // se le mandaba la clave para comprobarlo, y quien se hiciera pasar por ella se la llevaba
+                // (09-10-2026). Ver Link.proves y, para las emparejadas antes de la 0.5.3, claim.
                 if (e.paired && (f.host != e.host || f.port != e.port)) {
                     val t = e.token
                     val ok = withContext(Dispatchers.IO) {
-                        runCatching { Link(f.host, f.port, t).info(); Link(f.host, f.port, null).ping().optString("id") == f.id }.getOrDefault(false)
+                        runCatching {
+                            val l = Link(f.host, f.port, null)
+                            // Una consola con Link anterior a la 0.5.3 no sabe dar la prueba: con ella, como
+                            // antes, aceptando la clave en esa IP. Al actualizarla ya no hace falta mandarla.
+                            if (older(l.ping().optString("version"), "0.5.3")) {
+                                Link(f.host, f.port, t).info(); l.ping().optString("id") == f.id
+                            } else l.proves(f.id, Config.pcId, t.orEmpty())
+                        }.getOrDefault(false)
                     }
                     if (!ok) continue
                 }
@@ -1233,6 +1242,7 @@ class AppState(private val scope: CoroutineScope) {
                 val info = withContext(Dispatchers.IO) { l.info() }
                 e.info = info
                 e.online = true
+                claimOnce(e)
                 info.ludolog?.theme?.let { fetchFonts(e, it) }
                 if (info.ludolog != null) { refreshCompanion(e); loadArt(e, changed = false) }
                 if (info.name.isNotBlank() && info.name != e.name) {
@@ -1301,6 +1311,35 @@ class AppState(private val scope: CoroutineScope) {
 
     // ----------------------------------------------------------- emparejado
 
+    /** Si la version [v] («0.5.2») es anterior a [than]. Una que no se entiende, no. */
+    private fun older(v: String, than: String): Boolean {
+        val a = v.split('.').map { it.toIntOrNull() ?: return false }
+        val b = than.split('.').map { it.toInt() }
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val x = a.getOrElse(i) { 0 }; val y = b.getOrElse(i) { 0 }
+            if (x != y) return x < y
+        }
+        return false
+    }
+
+    /** Las consolas que ya saben el id de este PC, en esta sesion. */
+    private val claimed = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /**
+     * Le dice el id fijo de este PC a una consola emparejada antes de la 0.5.3, una vez por sesion y
+     * en la direccion de siempre (donde ya se le habla con la clave). Desde entonces la consola puede
+     * probar quien es en una IP nueva, y olvida los emparejamientos viejos de este PC. Una consola con
+     * Link anterior no lo entiende (404): se vuelve a intentar en la siguiente sesion.
+     */
+    private fun claimOnce(e: ConsoleEntry) {
+        if (!e.paired || !claimed.add(e.id)) return
+        scope.launch(Dispatchers.IO) {
+            runCatching { e.link().claim(Config.pcId) }
+                .onSuccess { n -> if (n > 0) notify("${e.name}: forgot $n older pairing${if (n == 1) "" else "s"} of this PC", about = e, kind = "pairing") }
+                .onFailure { claimed.remove(e.id) }
+        }
+    }
+
     fun startPairing(e: ConsoleEntry) {
         scope.launch {
             try {
@@ -1316,7 +1355,8 @@ class AppState(private val scope: CoroutineScope) {
     fun confirmPairing(e: ConsoleEntry, code: String, onError: (String) -> Unit) {
         scope.launch {
             try {
-                val t = withContext(Dispatchers.IO) { Link(e.host, e.port, null).pairConfirm(code, Config.pcName) }
+                val t = withContext(Dispatchers.IO) { Link(e.host, e.port, null).pairConfirm(code, Config.pcName, Config.pcId) }
+                claimed += e.id
                 e.token = t
                 e.online = true
                 Config.remember(e.toKnown())

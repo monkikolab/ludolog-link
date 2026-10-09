@@ -1,5 +1,6 @@
 package com.felp.ludologlink.pc
 
+import com.felp.ludolog.kit.Protocol
 import org.json.JSONObject
 import java.io.File
 import java.net.InetAddress
@@ -53,6 +54,21 @@ object Config {
         // De una vez: borrar y luego renombrar dejaba sin archivo si algo fallaba entre medio.
         java.nio.file.Files.move(tmp.toPath(), file.toPath(),
             java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+    }
+
+    /**
+     * El id fijo de este PC (Protocol.PC_ID), creado la primera vez (09-10-2026). Va al emparejar, para
+     * que la consola olvide los emparejamientos viejos de este mismo PC, y con el la consola prueba
+     * quien es en una IP nueva sin que el PC le mande su clave. Cada copia de Link PC (la instalada, la
+     * portable, la Dev) tiene el suyo, porque cada una tiene su carpeta de datos.
+     */
+    val pcId: String by lazy {
+        data.optString("pc_id").takeIf { it.matches(Protocol.PC_ID) } ?: synchronized(this) {
+            val id = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+            data.put("pc_id", id)
+            save()
+            id
+        }
     }
 
     /** Como se presenta este PC en la consola ("PCs emparejados"). */

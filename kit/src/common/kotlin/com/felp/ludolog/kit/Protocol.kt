@@ -23,6 +23,25 @@ object Protocol {
      */
     const val DISCOVERY_DEVICE = "LUDOLOG_LINK_DISCOVER device"
 
+    /**
+     * El id fijo de un PC (Link PC lo crea la primera vez y lo guarda en su config.json): 32 cifras
+     * hexadecimales. Con el, la consola sabe que un emparejamiento nuevo es del mismo PC que uno de
+     * antes y olvida los viejos, y puede probarle al PC que es ella sin que este mande su clave (ver
+     * [proof]). Antes de la 0.5.3 el PC no tenia id.
+     */
+    val PC_ID = Regex("[0-9a-f]{32}")
+
+    /**
+     * La prueba de que se conoce [secret] (la clave de un emparejamiento): HMAC-SHA256 de [nonce] y del
+     * id de quien contesta, en hexadecimal. Con ella quien pregunta en /ping comprueba que en una
+     * direccion nueva contesta de verdad quien dice, sin mandar la clave por la red.
+     */
+    fun proof(secret: String, nonce: String, id: String): String {
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+        mac.init(javax.crypto.spec.SecretKeySpec(secret.toByteArray(), "HmacSHA256"))
+        return mac.doFinal("$nonce|$id".toByteArray()).joinToString("") { "%02x".format(it) }
+    }
+
     /** Sufijo de los archivos a medio recibir: ocultos y nunca listados. */
     const val PART_SUFFIX = ".ludolink-part"
 

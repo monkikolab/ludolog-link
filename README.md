@@ -4,7 +4,7 @@
 
 [![Build](https://github.com/monkikolab/ludolog-link/actions/workflows/build.yml/badge.svg)](https://github.com/monkikolab/ludolog-link/actions/workflows/build.yml)
 
-**v0.5.2** · The companion of [Ludolog](https://github.com/monkikolab/ludolog-front-end). It keeps
+**v0.6.0** · The companion of [Ludolog](https://github.com/monkikolab/ludolog-front-end). It keeps
 your handhelds in sync with each other and with your PC, over your own Wi-Fi.
 
 <p align="center"><img src="docs/media/link-pc.gif" alt="Ludolog Link on the PC with two handhelds: overview, games across devices, cover preview, game panel, consoles and the Companion" width="860"></p>

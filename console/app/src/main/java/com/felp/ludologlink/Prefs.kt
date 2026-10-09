@@ -103,22 +103,44 @@ object Prefs {
         return obj.keys().asSequence().associateWith { obj.getString(it) }
     }
 
+    /**
+     * token -> id fijo del PC que lo tiene (Protocol.PC_ID). Solo los de PCs con Link 0.5.3 o
+     * posterior: los de antes, y las claves que se dan a otras consolas, no tienen.
+     */
     @Synchronized
-    fun putToken(ctx: Context, token: String, pc: String) {
+    fun tokenOwners(ctx: Context): Map<String, String> {
+        val raw = prefs(ctx).getString("token_owners", null) ?: return emptyMap()
+        val obj = JSONObject(raw)
+        return obj.keys().asSequence().associateWith { obj.getString(it) }
+    }
+
+    @Synchronized
+    fun putToken(ctx: Context, token: String, pc: String, owner: String? = null) {
         val obj = JSONObject(tokens(ctx))
         obj.put(token, pc)
-        prefs(ctx).edit().putString("tokens", obj.toString()).apply()
+        val owners = JSONObject(tokenOwners(ctx))
+        if (owner != null) owners.put(token, owner)
+        prefs(ctx).edit().putString("tokens", obj.toString()).putString("token_owners", owners.toString()).apply()
+    }
+
+    /** Apunta que [token] es del PC [owner]. */
+    @Synchronized
+    fun setOwner(ctx: Context, token: String, owner: String) {
+        val owners = JSONObject(tokenOwners(ctx))
+        owners.put(token, owner)
+        prefs(ctx).edit().putString("token_owners", owners.toString()).apply()
     }
 
     @Synchronized
-    fun forgetToken(ctx: Context, token: String) {
-        val obj = JSONObject(tokens(ctx).filterKeys { it != token })
-        prefs(ctx).edit().putString("tokens", obj.toString()).apply()
+    fun forgetToken(ctx: Context, token: String) = forgetTokens(ctx, setOf(token))
+
+    @Synchronized
+    fun forgetTokens(ctx: Context, gone: Set<String>) {
+        val obj = JSONObject(tokens(ctx).filterKeys { it !in gone })
+        val owners = JSONObject(tokenOwners(ctx).filterKeys { it !in gone })
+        prefs(ctx).edit().putString("tokens", obj.toString()).putString("token_owners", owners.toString()).apply()
     }
 
     @Synchronized
-    fun forgetPc(ctx: Context, pc: String) {
-        val obj = JSONObject(tokens(ctx).filterValues { it != pc })
-        prefs(ctx).edit().putString("tokens", obj.toString()).apply()
-    }
+    fun forgetPc(ctx: Context, pc: String) = forgetTokens(ctx, tokens(ctx).filterValues { it == pc }.keys)
 }

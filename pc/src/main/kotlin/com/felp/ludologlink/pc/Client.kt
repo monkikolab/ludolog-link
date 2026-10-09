@@ -218,6 +218,21 @@ class Link(val host: String, val port: Int, var token: String?) {
 
     fun ping(): JSONObject = call("GET", "/ping", readTimeout = 4_000)
 
+    /**
+     * Si en esta direccion contesta la consola [id] de verdad: con su id y con la prueba de que conoce
+     * la clave [secret] de este PC, sin mandarla (Protocol.proof). Las consolas con Link anterior a la
+     * 0.5.3, o que todavia no saben el id de este PC (ver [claim]), no la dan: entonces no.
+     */
+    fun proves(id: String, pcId: String, secret: String): Boolean {
+        val nonce = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        val j = call("GET", "/ping", mapOf("pc_id" to pcId, "nonce" to nonce), readTimeout = 4_000)
+        return j.optString("id") == id && secret.isNotEmpty() &&
+            java.security.MessageDigest.isEqual(j.optString("proof").toByteArray(), Protocol.proof(secret, nonce, id).toByteArray())
+    }
+
+    /** Le dice a la consola el id fijo de este PC (emparejados antes de la 0.5.3). Cuantos viejos olvido. */
+    fun claim(pcId: String): Int = call("POST", "/pair/claim", mapOf("pc_id" to pcId)).optInt("forgot")
+
     /** Lo que la consola apunto en su actividad despues de [since] (ms). Ver PcLog. */
     fun log(since: Long, source: String): List<LogEntry> {
         val a = call("GET", "/log", mapOf("since" to since)).optJSONArray("entries") ?: return emptyList()
@@ -226,8 +241,8 @@ class Link(val host: String, val port: Int, var token: String?) {
 
     fun pairRequest(pc: String) { call("POST", "/pair/request", mapOf("pc" to pc)) }
 
-    fun pairConfirm(code: String, pc: String): String {
-        val t = call("POST", "/pair/confirm", mapOf("code" to code, "pc" to pc)).getString("token")
+    fun pairConfirm(code: String, pc: String, pcId: String): String {
+        val t = call("POST", "/pair/confirm", mapOf("code" to code, "pc" to pc, "pc_id" to pcId)).getString("token")
         token = t
         return t
     }

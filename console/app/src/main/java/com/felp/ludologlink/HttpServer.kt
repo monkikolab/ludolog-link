@@ -218,7 +218,9 @@ class HttpServer(
             }
 
             r.method == "POST" && r.path == "/pair/confirm" -> {
-                val t = Pairing.confirm(ctx, r.query["code"] ?: "", pc)
+                // El id fijo del PC (desde la 0.5.3), solo si es un PC: las consolas mandan peer_id.
+                val owner = r.query["pc_id"]?.takeIf { r.query["peer_id"] == null && it.matches(Protocol.PC_ID) }
+                val t = Pairing.confirm(ctx, r.query["code"] ?: "", pc, owner)
                 if (t != null) {
                     // Otra consola (no un PC): nos da tambien un token suyo, para llamarla nosotros
                     // a ella cuando juguemos aqui. Ver Peers y CompanionShare.
@@ -240,6 +242,16 @@ class HttpServer(
             // seguridad, 07-10-2026): antes su token servia para todo lo del PC, de borrar ROMs a
             // restaurar un respaldo o cambiar los ajustes de Ludolog. Ver [peerMayAsk].
             caller != null && !peerMayAsk(r) -> respond(out, 403, err("not available to other devices"))
+
+            // Un PC emparejado antes de la 0.5.3 dice su id fijo: ver Pairing.claim. Solo un PC.
+            r.method == "POST" && r.path == "/pair/claim" -> {
+                if (caller != null) return respond(out, 403, err("only a PC can ask this"))
+                val owner = r.query["pc_id"]?.takeIf { it.matches(Protocol.PC_ID) }
+                    ?: return respond(out, 400, err("bad pc_id"))
+                val n = Pairing.claim(ctx, token!!, owner, Pairing.pcFor(ctx, token))
+                    ?: return respond(out, 409, err("this pairing belongs to another PC"))
+                respond(out, 200, JSONObject().put("ok", true).put("forgot", n))
+            }
 
             // Emparejar entre si a los devices de un device (Introduce): solo lo pide un device emparejado.
             r.path == "/peers" || r.path.startsWith("/pair/introduce") -> {
@@ -932,8 +944,12 @@ class HttpServer(
      * Peers.reach), en vez de fiarse del id, que cualquiera en la red puede repetir.
      */
     private fun pingProof(r: Request): String? {
-        val from = r.query["from"]?.takeIf { it.matches(SAFE_ID) } ?: return null
         val nonce = r.query["nonce"]?.takeIf { it.matches(Regex("[0-9a-f]{16,64}")) } ?: return null
+        // Un PC por su id fijo (desde la 0.5.3), con la clave que se le dio a el: ver Pairing.claim.
+        r.query["pc_id"]?.takeIf { it.matches(Protocol.PC_ID) }?.let { id ->
+            return Pairing.tokenOf(ctx, id)?.let { Peers.proof(it, nonce, deviceId) }
+        }
+        val from = r.query["from"]?.takeIf { it.matches(SAFE_ID) } ?: return null
         val peer = Peers.everyone(ctx).firstOrNull { it.id == from && it.backToken.isNotEmpty() } ?: return null
         return Peers.proof(peer.backToken, nonce, deviceId)
     }

@@ -21,7 +21,8 @@ Install Ludolog and open it once first. Link's setup then asks for:
   enter the 6-digit code it shows. If a device is paired with two others that aren't paired with each
   other, *Pair them all* introduces them without codes.
 - **The PC**: turn on PC Link on the device, click *Search* in the PC app, pick the device and enter
-  the code it shows. Only once.
+  the code it shows. Only once. Pairing the same PC again (after reinstalling Link on it, for
+  example) replaces its old pairing on the device instead of adding another.
 
 ## On the device
 
