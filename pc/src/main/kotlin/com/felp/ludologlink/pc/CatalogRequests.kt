@@ -13,6 +13,9 @@ import org.json.JSONObject
  * conectado se le deja la lista del catalogo (cuando cambia) y se le leen sus pedidos; los que faltan
  * se le mandan con su caratula y su video por la cola de subidas (AppState.romFromCatalog). En el
  * device: PcRequests. Sin carpeta de catalogo (o con su disco desconectado) no se hace nada.
+ *
+ * Lo arranca AppState al crearse ([start]) y da una vuelta cada 8 s. Rutas de la consola:
+ * PUT /pc/catalog (la lista, ver [indexOf]) y GET /pc/requests (lo pedido).
  */
 object CatalogRequests {
 

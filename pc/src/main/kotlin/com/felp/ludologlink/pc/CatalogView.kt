@@ -64,6 +64,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+// CatalogView.kt: el nombre viene de la antigua pestaña Catalog, que ahora es parte de Games
+// (GamesView.kt). Aqui queda lo que la tabla de Games usa por debajo: el modelo de filas
+// (CatalogCell, CatalogRow y catalogRows, que junta cada juego de los devices y del catalogo del PC
+// en una fila), el icono de cada celda (Part, PartIcon) con sus menus (iconOptions, fileOption,
+// fetchOptions: de donde traer lo que falta) y el dialogo de arte huerfano (OrphanMediaDialog).
+// Lo que hacen esos menus esta en AppState; el catalogo del PC en si, en PcCatalog.kt.
+
 /** Lo que tiene un device (o el catalogo del PC) de un juego: el ROM, la caratula y el video. */
 class CatalogCell(
     val rom: RomFile?, val art: Boolean, val video: Boolean,
@@ -150,7 +157,7 @@ internal enum class Part { ROM, ART, VIDEO }
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 internal fun PartIcon(app: AppState, devices: List<ConsoleEntry>, scan: PcCatalog.Scan?, r: CatalogRow, id: String, p: Part,
-                     window: java.awt.Window, changed: () -> Unit) {
+                     window: java.awt.Window, onDelete: (String, RomFile) -> Unit = { _, _ -> }, changed: () -> Unit) {
     val c = r.cells[id]
     val has = when (p) { Part.ROM -> c?.rom != null; Part.ART -> c?.art == true; Part.VIDEO -> c?.video == true }
     val icon: ImageVector = when (p) { Part.ROM -> KitIcons.Rom; Part.ART -> KitIcons.Cover; Part.VIDEO -> KitIcons.Video }
@@ -159,10 +166,11 @@ internal fun PartIcon(app: AppState, devices: List<ConsoleEntry>, scan: PcCatalo
     val target = if (id == CatalogRow.PC) null else dev(id)
 
     // Lo que se puede hacer con el: si falta, de donde traerlo o buscarlo en internet; si esta,
-    // quitarlo. Guardado por fila: se armaba para tres iconos por columna y por fila en cada redibujo.
+    // buscar otro o quitarlo, y el ROM borrarlo. Guardado por fila: se armaba para tres iconos por
+    // columna y por fila en cada redibujo.
     val scope = rememberCoroutineScope()
     val options = remember(r, id, p, scan, devices, has) {
-        iconOptions(app, devices, scan, r, id, p, has, changed) + fileOption(app, devices, scan, r, id, p, has, changed) { pick ->
+        iconOptions(app, devices, scan, r, id, p, has, changed, onDelete) + fileOption(app, devices, scan, r, id, p, has, changed) { pick ->
             scope.launch { (if (p == Part.VIDEO) chooseVideo(window) else chooseImage(window))?.let(pick) }
         }
     }
@@ -221,30 +229,40 @@ internal fun PartIcon(app: AppState, devices: List<ConsoleEntry>, scan: PcCatalo
 }
 
 /**
- * El menu de un icono de la tabla. Lo que falta: de donde traerlo y, en un device con Ludolog,
- * buscarlo en internet (el scraper, solo ese juego). Lo que esta: quitarlo.
+ * El menu de un icono de la tabla. Lo que falta: de donde traerlo y buscarlo en internet. Lo que
+ * esta: buscar otro (reemplaza al de ahora, como «Fetch box art» en Ludolog) o quitarlo; y el ROM,
+ * borrarlo de ese sitio ([onDelete] pregunta antes).
  */
 internal fun iconOptions(app: AppState, devices: List<ConsoleEntry>, scan: PcCatalog.Scan?, r: CatalogRow, id: String, p: Part,
-                         has: Boolean, changed: () -> Unit): List<Pair<String, () -> Unit>> = buildList {
+                         has: Boolean, changed: () -> Unit, onDelete: (String, RomFile) -> Unit = { _, _ -> }): List<Pair<String, () -> Unit>> = buildList {
     val c = r.cells[id]
     val d = devices.firstOrNull { it.id == id }
     val f = c?.rom
     val video = p == Part.VIDEO
+    // Buscarlo en internet, como en Ludolog: en un device con Ludolog que tenga el juego, o para el
+    // catalogo del PC con lo de un device conectado. Ver ArtPicker.
+    val canFetch = p != Part.ROM && when {
+        d != null -> f != null && d.info?.ludolog != null && d.scrapeState == null
+        else -> id == CatalogRow.PC && scan != null && devices.any { it.info?.ludolog != null && it.scrapeState == null }
+    }
+    fun fetch() = app.picker.fetch(r, id, devices, scan, video, changed)
     if (!has) {
         addAll(fetchOptions(app, devices, scan, r, id, p, changed))
         // Arte para un device que aun no tiene el juego: primero el juego (luego, su arte).
         if (p != Part.ROM && d != null && f == null && !r.locked)
             addAll(fetchOptions(app, devices, scan, r, id, Part.ROM, changed).map { (t, a) -> "First the game: $t" to a })
-        if (p != Part.ROM && d != null && f != null && d.info?.ludolog != null && d.scrapeState == null)
-            add("Scrape from the internet" to { app.scrape(d, listOf(f), if (video) ScrapeMode.VIDEOS else ScrapeMode.COVERS) })
-        // Al catalogo del PC: el scraper con lo de un device conectado, y lo bajado se queda en el PC.
-        if (p != Part.ROM && id == CatalogRow.PC && scan != null && devices.any { it.info?.ludolog != null && it.scrapeState == null })
-            add("Scrape from the internet" to { app.scrapeToCatalog(r, devices, scan, video, changed) })
+        if (canFetch) add((if (video) "Fetch video…" else "Fetch box art…") to ::fetch)
     } else if (p != Part.ROM) {
+        if (canFetch) add((if (video) "Fetch another video…" else "Fetch other box art…") to ::fetch)
         if (d != null && f != null && d.info?.ludolog != null) add("Remove" to { app.removeMedia(d, f, video) })
         if (id == CatalogRow.PC) (if (video) c?.videoFile else c?.artFile)?.let { file ->
+            add("Show in folder" to { app.showInFolder(file) })
             add("Remove from PC catalog" to { app.removeFromCatalog(file); changed() })
         }
+    } else if (f != null && !r.locked) {
+        if (id == CatalogRow.PC && scan != null) add("Show in folder" to { app.showInFolder(PcCatalog.file(scan, f)) })
+        // El ROM: borrarlo de aqui (ver GamesView, que pregunta antes). Steam y DoomForge no se borran.
+        add((if (d != null) "Delete from ${d.name}…" else "Delete from PC catalog…") to { onDelete(id, f) })
     }
 }
 

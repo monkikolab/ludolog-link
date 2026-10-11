@@ -46,6 +46,11 @@ import com.felp.ludolog.kit.Format
 import com.felp.ludolog.kit.Protocol
 import java.io.File
 
+// UploadPlan.kt: subir ROMs del PC a uno o varios devices. Empieza al soltar archivos o carpetas en
+// la ventana, o con "Upload ROMs…" de la ficha del device (las dos cosas en Main.kt y ConsoleView):
+// UploadPlan.start arma una fila por archivo y adivina su carpeta (suggest); UploadPlanDialog deja
+// revisarlo y lo manda a la cola de AppState.transfers, con una pasada del scraper si se pide.
+
 /** Un archivo del PC y a donde va en la consola. Sistema y nombre se pueden cambiar antes de subir. */
 class PlanRow(val file: File, name: String) {
     /** Lo que pesa, leido una vez: se sumaba en cada redibujo, archivo por archivo en el disco. */

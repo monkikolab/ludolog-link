@@ -82,6 +82,13 @@ import io.github.vinceglb.filekit.dialogs.openFilePicker
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
+// ConsoleView.kt: la parte derecha de la ventana (Main.kt la pone junto a la barra lateral).
+// ConsoleView decide que se ve segun el estado de la consola elegida (sin emparejar, conectando,
+// sin conexion pero con copia en el PC, o al dia) y reparte las pestañas: Games y Consoles son de
+// todos los conectados (AppState.globalTab); Overview, Saves, Companion, Settings y Log, del device
+// (ConsoleEntry.tab), y estan en Sections.kt, SaveManager.kt, CompanionView.kt y LogView.kt.
+// Ademas: ConsolePanel (la ficha del device en la barra lateral, con "Upload ROMs…" y
+// "Sync to device") y los selectores de archivos de Windows (chooseImage, chooseVideo, chooseFolder).
 
 @Composable
 fun ConsoleView(app: AppState, e: ConsoleEntry, window: java.awt.Window) {
@@ -130,7 +137,10 @@ fun ConsoleView(app: AppState, e: ConsoleEntry, window: java.awt.Window) {
     }
 }
 
-/** Las cuatro secciones de una consola, marcadas como marca el tema la fila elegida. */
+/**
+ * Las siete pestañas, marcadas como marca el tema la fila elegida: Games y Consoles son de todos los
+ * devices (AppState.globalTab); Overview, Saves, Companion, Settings y Log, del elegido (ConsoleEntry.tab).
+ */
 @Composable
 private fun SectionTabs(app: AppState, e: ConsoleEntry) {
     val tabs = listOf("overview" to "Overview", "games" to "Games", "consoles" to "Consoles", "saves" to "Saves", "companion" to "Companion",

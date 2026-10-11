@@ -1,0 +1,57 @@
+name: Save sync with my emulator
+description: Tell whether save sync works with an emulator you use. Save sync is experimental, so every report helps.
+title: "Save sync: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        So far save sync has been tested with in-game saves on RetroArch, AetherSX2 / NetherSX2,
+        Dolphin, PrimeHack, PPSSPP, Azahar and Eden. Reports for other emulators, other devices and
+        save states are very welcome.
+  - type: input
+    id: emulator
+    attributes:
+      label: Emulator and version
+      placeholder: e.g. DuckStation 0.1-9000
+    validations:
+      required: true
+  - type: input
+    id: folder
+    attributes:
+      label: Saves folder you set in Link
+      placeholder: e.g. /storage/emulated/0/duckstation/memcards
+  - type: textarea
+    id: devices
+    attributes:
+      label: Devices
+      description: Each handheld with its Android version.
+      placeholder: |
+        - Retroid Pocket 5, Android 13
+        - AYN Odin 3, Android 15
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of save
+      options:
+        - In-game saves (memory card, cartridge)
+        - Save states
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: How did it go?
+      options:
+        - Works
+        - Works, with some issues
+        - Doesn't sync
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Details
+      description: What you did and what happened. If something went wrong, the *Log* tab and Settings → About → *Export diagnostics* help a lot.

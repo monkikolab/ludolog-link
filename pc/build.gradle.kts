@@ -1,3 +1,12 @@
+// Ludolog Link PC: la app de Windows (Kotlin y Compose Desktop) que maneja desde el PC los devices
+// con Ludolog Link. Compila src/main (la app en com/felp/ludologlink/pc; las imitaciones de piezas
+// de Android y de Ludolog en com/felp/frontcomp, androidx y java/android), el kit comun de ../kit
+// y, tal cual, archivos de ../../ludolog-front-end (ludologSources, abajo). La version sale de
+// version.properties de ludolog-front-end. Tareas de uso diario:
+//   run            arrancar desde Gradle (sin carpeta de la app: PcDirs.app es nulo)
+//   buildRelease   el instalador .msi (jpackage con la plantilla de msi/) y el .zip portable, en build/release
+// Abajo, el arranque rapido (CDS) y por que la entrega no usa packageMsi.
+
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.util.Properties
 import java.util.zip.ZipFile
@@ -188,10 +197,16 @@ afterEvaluate {
 
 val releaseDir: Provider<Directory> = layout.buildDirectory.dir("release")
 
+// El archivo de arranque de la app que deja en su carpeta el primer arranque (ver arriba): si se abrio
+// la de build/ para probar, ahi esta, y entraba en la entrega (51 MB que en otro PC no valen: Java
+// comprueba la ruta exacta de los jars). Nunca va en el instalador ni en el portable (10-10-2026).
+val appJsa = "ludolog-link.jsa"
+
 val buildInstaller by tasks.registering(Exec::class) {
     dependsOn("createDistributable", "unzipWix")
     val wix = layout.buildDirectory.dir("wix311")
     doFirst {
+        appImage.get().asFile.resolve(appJsa).delete()
         releaseDir.get().asFile.mkdirs()
         releaseDir.get().asFile.listFiles { f -> f.extension == "msi" }?.forEach { it.delete() }
         environment("PATH", wix.get().asFile.path + File.pathSeparator + System.getenv("PATH"))
@@ -212,7 +227,7 @@ val buildInstaller by tasks.registering(Exec::class) {
 
 val buildPortable by tasks.registering(Zip::class) {
     dependsOn("createDistributable")
-    from(appImage) { into("Ludolog Link") }
+    from(appImage) { into("Ludolog Link"); exclude(appJsa) }
     // La marca de portable: con ella guarda todo en data\ a su lado y no en %APPDATA% (ver PcDirs).
     from(project.file("portable")) { into("Ludolog Link") }
     destinationDirectory.set(releaseDir)

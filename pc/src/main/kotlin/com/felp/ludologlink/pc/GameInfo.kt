@@ -37,6 +37,12 @@ import com.felp.ludolog.kit.ui.Look
 import org.json.JSONObject
 import java.io.File
 
+// GameInfo.kt: nombre, genero y descripcion de un juego, para que digan lo mismo en todos los
+// sitios. GameInfo lee lo de cada device (de su copia en el PC), CatalogInfo lo del catalogo del PC
+// (`<catalogo>/media/info.json`), y GameInfoSection es la seccion Info del panel de Games, con
+// MixedDot (el punto amarillo de "no dicen lo mismo") y Variants, que tambien usa ConsolesView.
+// Guardar llama a AppState.saveGameInfo, que lo manda con POST /meta/edit.
+
 /**
  * Lo corregido a mano de un juego en cada device: su nombre, su genero y su descripcion (lo que
  * Ludolog Link lleva de una consola a otra, ver MetaEdits en la consola). Vacio: lo de siempre (el

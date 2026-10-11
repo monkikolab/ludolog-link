@@ -39,8 +39,8 @@ import com.felp.frontcomp.selectionBar
 /**
  * Ludolog Link (la del PC y la de la consola) con el aspecto de Ludolog: el MISMO `Theme` que usa el front-end (ThemeData.kt,
  * compilado tal cual) y sus mismos adornos (Ornaments.kt). Aqui solo se traduce a lo que
- * Material necesita y se ponen los tres gestos que Ludolog repite en todas partes: la caja de
- * cada tema, la fila elegida y el barrido del de fosforo.
+ * Material necesita y se ponen los dos gestos que Ludolog repite en todas partes: la caja de
+ * cada tema ([Pane]) y la fila elegida ([selectedRow]). El barrido del de fosforo no: es un efecto.
  */
 @Composable
 fun LudologLook(theme: Theme, content: @Composable () -> Unit) {

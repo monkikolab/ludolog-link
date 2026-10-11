@@ -45,6 +45,9 @@ import com.felp.ludolog.kit.ui.selectedRow
  * con cuantos juegos tiene en cada device. Elegir una abre lo suyo que va a todos: el nombre y la
  * descripcion (los de Ludolog, `name.sys.<id>` y `desc.sys.<id>`), que viajan con Ludolog Link como
  * los de un juego. Vacio: lo del catalogo de consolas.
+ *
+ * Es una pestaña de todos (AppState.globalTab = "consoles", ver ConsoleView). Guardar llama a
+ * AppState.saveConsoleInfo, que lo manda a cada device con POST /meta/edit.
  */
 @Composable
 fun ConsolesView(app: AppState) {

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions, ideas and setups
+    url: https://github.com/monkikolab/ludolog-front-end/discussions
+    about: Ask anything about Ludolog or Link, suggest a feature or show your setup in Ludolog's Discussions.
+  - name: Ludolog itself (the frontend)
+    url: https://github.com/monkikolab/ludolog-front-end/issues/new/choose
+    about: Problems with the frontend go in its own repository.

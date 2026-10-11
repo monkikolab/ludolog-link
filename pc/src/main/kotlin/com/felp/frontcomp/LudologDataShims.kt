@@ -14,6 +14,11 @@ import java.sql.DriverManager
  *
  * Todo de solo leer: el PC trabaja sobre copias de los cuadernos, y lo que Ludolog escribiria
  * (misiones cumplidas, ajustes) aqui no hace nada. Ver ludolog-front-end/docs/ludolog-link.md.
+ *
+ * Imitan: DataHome (la carpeta de datos), Logbook con su SQLiteDatabase y su Cursor (aqui SQLite
+ * por JDBC: Logbook, JdbcDb, JdbcCursor) y Prefs (lo leen tambien el scraper y sus claves de IGDB).
+ * Ojo: DataHome.dir y PcLogbooks son globales, de UNA consola a la vez. Los dos los pone
+ * CompanionReader.point (Companion.kt); DataHome.dir, tambien PcScraper.point (Scraper.kt).
  */
 
 /** La carpeta de datos de Ludolog, aqui la copia local de la de una consola. */
@@ -25,16 +30,16 @@ object DataHome {
     fun work(): File = File(System.getProperty("java.io.tmpdir"), "ludolog-link-work").also { it.mkdirs() }
 }
 
-/**
- * Los cuadernos, como el Logbook de Ludolog con `withOthers`: el de la consola como `main` y
- * los de las demas enganchados como `other1`, `other2`... con sus numeros corridos.
- */
 /** Que cuadernos abre `Logbook(ctx, ...)` en el PC: los de la consola que se esta mirando. */
 internal object PcLogbooks {
     @Volatile var own: File? = null
     @Volatile var others: List<File> = emptyList()
 }
 
+/**
+ * Los cuadernos, como el Logbook de Ludolog con `withOthers`: el de la consola como `main` y
+ * los de las demas enganchados como `other1`, `other2`... con sus numeros corridos.
+ */
 internal class Logbook(main: File, otherFiles: List<File> = emptyList()) : Closeable {
     /** Como lo abren las pestanas del Companion en Ludolog: el de la consola, y con `withOthers` los demas. */
     constructor(@Suppress("UNUSED_PARAMETER") ctx: android.content.Context, withOthers: Boolean = false) :
@@ -152,9 +157,11 @@ internal class Prefs(
         get() = videos ?: AllThemes.any { config["look.video.${it.id}"] as? Boolean ?: true }
     val anyThemeHearsVideo: Boolean get() = AllThemes.any { config["look.sound.${it.id}"] as? Boolean ?: true }
 
-    /** Las credenciales (IGDB) estan selladas en la consola y no salen de ella: en el PC no hay. */
-    @Suppress("UNUSED_PARAMETER")
-    fun credential(key: String): String = ""
+    /**
+     * Las credenciales (IGDB): las del PC, escritas aqui o llegadas de una consola por Link (ver
+     * PcKeys). Asi el scraper del PC usa las mismas fuentes que el de la consola.
+     */
+    fun credential(key: String): String = com.felp.ludologlink.pc.PcKeys.value(key)
 
     var trackedMissions: Map<String, Long>
         get() = stamps(config["meta.missions"] as? String).toMap()

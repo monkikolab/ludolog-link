@@ -17,6 +17,12 @@ import kotlin.concurrent.thread
  *
  * Se hace al encender el servicio, al avisar Ludolog de una partida nueva (COMPANION_CHANGED, ver
  * LinkService) y a mano. Cada consola puede hacerlo sola: con el token de la otra, manda y trae.
+ *
+ * Cada pasada con un device lleva ademas las caratulas que faltan (CompanionCovers), las correcciones
+ * de juegos (MetaEdits) y las claves de arte (ArtKeys): es la sincronizacion general entre consolas,
+ * menos partidas (SaveSync) y ROMs (RomTransfer). Por eso tambien la piden HttpServer (correcciones o
+ * claves que manda el PC) y LinkService (EDITS_CHANGED, KEYS_CHANGED). A la otra le pide GET y PUT
+ * de la ruta ludolog/companion y GET de ludolog/file (Peers.download).
  */
 object CompanionShare {
     private val busy = AtomicBoolean(false)
@@ -78,10 +84,12 @@ object CompanionShare {
         val covers = runCatching { CompanionCovers.pull(ctx, p, dir, myOwn) }.getOrDefault(0)
         // Y las correcciones de nombres, descripciones y generos (ver MetaEdits).
         val meta = runCatching { MetaEdits.syncWith(ctx, p) }.getOrDefault("")
+        // Y las claves de las fuentes de arte, si cambiaron en una de las dos (ver ArtKeys).
+        val keys = runCatching { ArtKeys.syncWith(ctx, p) }.getOrDefault("")
         val tail = (if (covers > 0) ", $covers ${if (covers == 1) "cover" else "covers"}" else "") +
-            (if (meta.isNotEmpty()) ", $meta" else "")
+            (if (meta.isNotEmpty()) ", $meta" else "") + (if (keys.isNotEmpty()) ", $keys" else "")
         return when {
-            sent == 0 && got == 0 && covers == 0 && meta.isNotEmpty() -> meta
+            sent == 0 && got == 0 && covers == 0 && (meta.isNotEmpty() || keys.isNotEmpty()) -> tail.removePrefix(", ")
             sent == 0 && got == 0 -> "already in sync$tail"
             else -> "sent $sent, got $got$tail"
         }

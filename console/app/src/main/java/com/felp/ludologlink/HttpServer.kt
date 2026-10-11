@@ -29,41 +29,77 @@ interface TransferHooks {
 
 /**
  * Servidor HTTP minimo. Una peticion por conexion; las subidas se escriben por
- * trozos directamente a disco, sin pasar el archivo entero por memoria.
+ * trozos directamente a disco, sin pasar el archivo entero por memoria. Lo arranca LinkService
+ * en Dev.httpPort y le cuenta las transferencias por [TransferHooks].
  *
- *   GET  /ping                     sin token: quien soy, si estas emparejado y si PC Link esta puesto
+ * Sin token:
+ *   GET  /ping[?from=|pc_id=&nonce=]    quien soy, si estas emparejado y si PC Link esta puesto; con
+ *                                       nonce, la prueba de que conozco la clave (ver [pingProof])
  *   POST /pair/request?pc=[&device=1]   la consola muestra un codigo (device: la pide otra consola)
- *   POST /pair/confirm?code=&pc=   devuelve un token
+ *   POST /pair/confirm?code=&pc=[&pc_id=|&peer_id=&peer_port=&back=]   devuelve un token (y el id de aqui)
  *
  * Al PC solo se le atiende con PC Link puesto (Prefs.pcLink), y a otra consola solo compartiendo
  * con los devices (Prefs.syncDevices): si no, 403 con el motivo, que cada lado enseña tal cual.
- *   GET  /info                     bateria, almacenamiento, carpeta de ROMs
- *   GET  /roms                     lista de ROMs por sistema
- *   GET  /systems                  carpetas de sistema y extensiones que aceptan
- *   GET  /check/<sistema>/<archivo>?size=&overwrite=   ¿se puede subir? (sin cuerpo)
- *   PUT  /roms/<sistema>/<archivo>?mtime=&overwrite=   subir un ROM
- *   GET  /roms/<sistema>/<archivo>                      descargar (admite Range)
- *   POST /rename?system=&from=&to=                      renombrar (su .sbi va con el)
- *   DELETE /roms/<sistema>/<archivo>                     borrar (su .sbi va con el)
- *   GET  /ludolog/manifest                              los archivos de la carpeta de datos de Ludolog
- *   POST /ludolog/config   (JSON)                       ajustes nuevos para Ludolog: los aplica ella (ver Ludolog.queueConfig)
- *   GET  /ludolog/art                                   que juegos tienen arte y video, donde los busca Ludolog
- *   GET  /ludolog/media/list                            cada archivo de arte y video, con su carpeta y su dueño
- *   GET  /ludolog/media/file?path=<ruta>                uno de ellos
- *   POST /ludolog/media/delete  (JSON {paths})          borrar los elegidos (solo dentro de las carpetas de medios)
- *   PUT  /pc/catalog  (JSON {games})                    la lista del catalogo del PC, para pedir de ella (ver PcRequests)
- *   GET  /pc/requests                                   lo pedido de ese catalogo que aun no esta aqui
- *   PUT  /ludolog/media?path=media/<consola>/<tipo>/<archivo>   una imagen de arte desde el PC
- *   GET  /ludolog/file?path=...                         uno de ellos (solo lectura; un cuaderno, por copia coherente)
- *   GET  /log?since=<ms>                                lo apuntado en la actividad desde entonces (ver LinkLog)
- *   GET  /meta/edits?since=<seq>                        correcciones de juegos y consolas desde entonces (ver MetaEdits)
- *   POST /meta/edits  (JSON {entries})                  correcciones de otra consola
- *   POST /meta/edit  (JSON {kind, system, path, field, value, t[, keys]})   una correccion del PC (path: el juego aqui)
+ * Todo lo demas pide token (401 sin el), y una consola emparejada solo llega a lo de [peerMayAsk].
+ *
+ * Emparejamiento:
+ *   POST /pair/claim?pc_id=                             (solo PC) el id fijo de un PC emparejado antes de la 0.5.3 (ver Pairing.claim)
  *   GET  /peers                                         (solo devices) con que devices esta emparejado
  *   POST /pair/introduce?id=&name=&host=&port=[&token=]  (solo devices) otro device presentado por este (ver Introduce)
  *   POST /pair/introduce/complete?id=&token=            (solo devices) la clave del presentado
+ * ROMs:
+ *   GET  /info                     bateria, almacenamiento, carpeta de ROMs
+ *   GET  /roms                     lista de ROMs por sistema (con ETag: ver [respondListing])
+ *   GET  /systems                  carpetas de sistema y extensiones que aceptan
+ *   GET  /check/<sistema>/<archivo>?size=&overwrite=[&id=]   ¿se puede subir? (sin cuerpo; y cuanto llego ya de ese envio)
+ *   PUT  /roms/<sistema>/<archivo>?mtime=&overwrite=[&id=&offset=]   subir un ROM (con id, se puede retomar)
+ *   GET  /roms/<sistema>/<archivo>                      descargar (admite Range)
+ *   POST /rename?system=&from=&to=                      renombrar (su .sbi va con el)
+ *   DELETE /roms/<sistema>/<archivo>                     borrar (su .sbi va con el)
+ *   PUT  /pc/catalog  (JSON {games})                    la lista del catalogo del PC, para pedir de ella (ver PcRequests)
+ *   GET  /pc/requests                                   lo pedido de ese catalogo que aun no esta aqui
+ * Carpeta de datos de Ludolog (ver Ludolog):
+ *   GET  /ludolog/manifest                              los archivos de la carpeta de datos de Ludolog
+ *   GET  /ludolog/file?path=<ruta>                      uno de ellos (solo lectura; un cuaderno, por copia coherente)
+ *   POST /ludolog/config   (JSON)                       ajustes nuevos para Ludolog: los aplica ella (ver Ludolog.queueConfig)
+ *   PUT  /ludolog/restore?path=<ruta>                   un archivo de un respaldo del PC, a link/restore/ (ver Ludolog.restoreTarget)
+ *   DELETE /ludolog/restore                             tirar lo que quedara de un respaldo a medio subir
+ *   POST /ludolog/restore  [(JSON de ajustes)]          el respaldo esta entero: Ludolog lo pone al reiniciarse
+ *   GET  /ludolog/keys?pub=  y  POST /ludolog/keys (JSON {pub, to, box})   claves de las fuentes de arte, cifradas (ver ArtKeys)
+ * Arte y video:
+ *   GET  /ludolog/art                                   que juegos tienen arte y video, donde los busca Ludolog
+ *   GET  /ludolog/preview?systems=&stem=&kind=art|video  el arte o el video de un juego, para verlo en el PC
+ *   GET  /ludolog/media/list                            cada archivo de arte y video, con su carpeta y su dueño
+ *   GET  /ludolog/media/file?path=<ruta>                uno de ellos
+ *   POST /ludolog/media/delete  (JSON {paths})          borrar los elegidos (solo dentro de las carpetas de medios)
+ *   PUT  /ludolog/media?path=media/<consola>/<tipo>/<archivo>   una imagen (o un video .mp4) desde el PC
+ *   DELETE /ludolog/media?systems=&stem=&kind=art|video  quitar el arte o el video de un juego (solo de media/ de Ludolog)
+ * Companion:
+ *   GET  /ludolog/companion                             los cuadernos de aqui y lo lejos que llega cada uno (ver CompanionShare)
+ *   PUT  /ludolog/companion?name=<cuaderno>.db          el cuaderno de otra consola (nunca el propio)
+ *   GET  /ludolog/companion/cover?system=&file=&name=   la miniatura de una caratula de aqui (ver CompanionCovers)
+ * Correcciones y registro:
+ *   GET  /meta/edits?since=<seq>                        correcciones de juegos y consolas desde entonces (ver MetaEdits)
+ *   POST /meta/edits  (JSON {entries})                  correcciones de otra consola
+ *   POST /meta/edit  (JSON {kind, system, path, field, value, t[, keys]})   una correccion del PC (path: el juego aqui)
+ *   GET  /log?since=<ms>                                lo apuntado en la actividad desde entonces (ver LinkLog)
+ * Partidas guardadas (ver [savesRoute], Saves y SaveSync). Nunca se escribe una sin /saves/begin antes:
+ *   GET  /saves/backups                                 los respaldos de aqui, de todos los emuladores
+ *   GET  /saves/backup?pkg=&name=                       uno de ellos
+ *   GET  /saves/state?pkg=[&group=]                     cuando se jugo cada juego aqui, y desde cuando hay base con quien llama
+ *   GET  /saves/manifest?pkg=                           los archivos, con tamaño y huella SHA-1
+ *   GET  /saves/file?pkg=&path=                         uno de ellos
+ *   POST /saves/begin?pkg=[&why=]                       respalda la carpeta de aqui y abre la escritura
+ *   PUT  /saves/file?pkg=&path=                         escribir uno (solo con la escritura abierta y sin juego abierto)
+ *   POST /saves/end?pkg=[&played=]  (JSON {files})      cierra la escritura y fija la base con la consola que llama
  *
  * /info lleva ademas "ludolog": si esta instalado, su version y su aspecto (tema, luz, acento).
+ *
+ * Mapa del archivo: arranque y parada; HTTP (cabeceras, [route] —el reparto de todo lo de arriba—,
+ * [savesRoute] y [receive], que pasa un cuerpo a disco por un temporal); subida de ROMs ([validate],
+ * [upload], retomable con id); descarga (con Range); Ludolog ([ludologFile]); renombrar; borrar; y al
+ * final respuestas y reglas: [peerMayAsk], las escrituras de partidas abiertas ([writing]),
+ * [pingProof] y [respondListing].
  */
 class HttpServer(
     private val ctx: Context,
@@ -370,6 +406,27 @@ class HttpServer(
                 }
             }
 
+            // Las claves de las fuentes de arte de Ludolog (IGDB), cifradas: del PC y de las consolas. Ver ArtKeys.
+            r.method == "GET" && r.path == "/ludolog/keys" ->
+                ArtKeys.offer(ctx, token!!, r.query["pub"])?.let { respond(out, 200, it) }
+                    ?: respond(out, 404, err("Ludolog can't share its keys on this device"))
+            r.method == "POST" && r.path == "/ludolog/keys" -> {
+                val n = r.headers["content-length"]?.toIntOrNull()?.takeIf { it in 1..64_000 }
+                    ?: return respond(out, 411, err("missing body"))
+                val (buf, got) = readBody(r, n)
+                val body = runCatching { JSONObject(String(buf, 0, got, Charsets.UTF_8)) }.getOrNull()
+                    ?: return respond(out, 400, err("invalid JSON"))
+                try {
+                    val n = ArtKeys.accept(ctx, token!!, caller?.name ?: Pairing.pcFor(ctx, token), body)
+                    respond(out, 200, JSONObject().put("changed", n))
+                    // Y a las demas consolas: quien las mando (el PC, sobre todo) no tiene por que estar
+                    // emparejado con todas.
+                    if (n > 0) CompanionShare.syncAll(ctx, "art source keys")
+                } catch (x: ArtKeys.Refused) {
+                    respond(out, x.code, err(x.message ?: "refused"))
+                }
+            }
+
             r.method == "GET" && r.path == "/ludolog/art" -> respondListing(r, out, Ludolog.artIndex(ctx))
 
             // Los archivos de medios, para los huerfanos y el arte entre consolas. Ver Ludolog.mediaList.
@@ -530,11 +587,15 @@ class HttpServer(
                 // Para decidir sin fechas de archivo: cuando se jugo aqui cada juego, y desde cuando
                 // (en el reloj de aqui) esta consola y la que llama tienen la base comun.
                 val caller = Peers.byBackToken(ctx, token)
-                respond(out, 200, JSONObject()
-                    .put("configured", e != null).put("supported", e == null || Saves.supported(e))
-                    .put("played", e?.played ?: 0L).put("inUse", Saves.inUse(ctx, pkg))
-                    .put("games", JSONObject(Saves.gamePlays(ctx, pkg) as Map<*, *>))
-                    .put("syncedAt", caller?.let { Saves.base(it.id, pkg).first } ?: 0L))
+                // En modo flexible puede contestar otro emulador de aqui (Saves.forState): se dice cual,
+                // y quien pregunta usa ese paquete en lo que sigue (manifest, file, begin, end).
+                val s = Saves.forState(ctx, pkg, r.query["group"]?.takeIf { it.matches(SAFE_ID) })
+                val k = s?.pkg ?: pkg
+                respond(out, 200, JSONObject().put("pkg", k).put("app", Saves.appName(ctx, k))
+                    .put("configured", s != null).put("supported", s == null || Saves.supported(s))
+                    .put("played", s?.played ?: 0L).put("inUse", Saves.inUse(ctx, k))
+                    .put("games", JSONObject(Saves.gamePlays(ctx, k) as Map<*, *>))
+                    .put("syncedAt", caller?.let { Saves.base(it.id, k).first } ?: 0L))
             }
             e == null -> respond(out, 409, err("no saves folder set for that emulator here"))
             r.method == "GET" && r.path == "/saves/manifest" -> respond(out, 200, JSONObject().put("files", Saves.manifest(e)))
@@ -910,9 +971,11 @@ class HttpServer(
 
     /**
      * Lo que una consola emparejada puede pedir a otra: exactamente lo que piden Peers, SaveSync,
-     * CompanionShare, CompanionCovers, MetaEdits, RomTransfer, LogUi e Introduce. Lo demas (subir,
-     * borrar o renombrar ROMs, ajustes y respaldos de Ludolog, arte, catalogo del PC) es del PC.
-     * /ping y /pair/request|confirm se atienden antes, sin token.
+     * SavesUi y PeerState (/saves/state), CompanionShare, CompanionCovers, MetaEdits, RomTransfer,
+     * LogUi, Introduce y ArtKeys (/ludolog/keys). El arte se puede leer (/ludolog/art,
+     * /ludolog/media/list y /ludolog/media/file: RomTransfer trae un ROM con su caratula); ponerlo o
+     * quitarlo es solo del PC, como subir, borrar o renombrar ROMs, los ajustes y respaldos de
+     * Ludolog y el catalogo del PC. /ping y /pair/request|confirm se atienden antes, sin token.
      */
     private fun peerMayAsk(r: Request): Boolean {
         val p = r.path
@@ -921,13 +984,14 @@ class HttpServer(
                 // De la carpeta de Ludolog, solo cuadernos del Companion: es lo unico que se piden.
                 (p == "/ludolog/file" && r.query["path"].orEmpty().matches(LOGBOOK_PATH))
             "PUT" -> p == "/ludolog/companion" || p == "/saves/file"
-            "POST" -> p == "/meta/edits" || p == "/saves/begin" || p == "/saves/end" || p.startsWith("/pair/introduce")
+            "POST" -> p == "/meta/edits" || p == "/saves/begin" || p == "/saves/end" || p.startsWith("/pair/introduce") ||
+                p == "/ludolog/keys"
             else -> false
         }
     }
 
     private val PEER_GET = setOf(
-        "/peers", "/log", "/roms", "/systems", "/ludolog/art", "/ludolog/media/list", "/ludolog/media/file",
+        "/peers", "/log", "/roms", "/systems", "/ludolog/art", "/ludolog/media/list", "/ludolog/media/file", "/ludolog/keys",
         "/ludolog/companion", "/ludolog/companion/cover", "/meta/edits", "/saves/state", "/saves/manifest", "/saves/file",
     )
     private val LOGBOOK_PATH = Regex("""companion/[^/\\]+\.db""")

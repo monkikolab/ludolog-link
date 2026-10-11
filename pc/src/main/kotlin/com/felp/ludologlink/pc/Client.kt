@@ -18,6 +18,15 @@ import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
+// Client.kt: todo lo que el PC le dice a Ludolog Link en las consolas (el servidor es
+// console/app/.../HttpServer.kt de este repo). Arriba, los tipos que devuelve (RomFile, MediaFile,
+// DataFile, ConsoleInfo...); luego Discovery, la busqueda por UDP (broadcast de
+// Protocol.DISCOVERY_QUERY a Dev.discoveryPort), y Link, el cliente HTTP de UNA consola, con el
+// token del emparejado como Bearer. Rutas: /ping, /pair (request, confirm, claim), /info, /roms (GET
+// con Range, PUT que retoma con id y offset, DELETE), /check, /systems, /rename, /log, /meta/edit,
+// /ludolog (config, keys, art, media, preview, file, manifest, companion, restore), /saves y /pc.
+// Todo bloquea (Dispatchers.IO) y falla con LinkError: 0 sin respuesta, LOCAL de este PC, o el HTTP.
+
 /** Error con el motivo que da la consola. status 0 = no hubo respuesta. */
 class LinkError(val status: Int, message: String) : Exception(message) {
     companion object {
@@ -30,8 +39,10 @@ class LinkError(val status: Int, message: String) : Exception(message) {
     }
 }
 
-/** Una consola que contesto a la busqueda. */
-/** [pcLink]: si la consola tiene PC Link puesto; sin el contesta, pero no atiende al PC. */
+/**
+ * Una consola que contesto a la busqueda. [pcLink]: si la consola tiene PC Link puesto; sin el
+ * contesta, pero no atiende al PC.
+ */
 data class Found(val id: String, val name: String, val model: String, val host: String, val port: Int, val version: String,
                  val pcLink: Boolean = true)
 
@@ -315,13 +326,23 @@ class Link(val host: String, val port: Int, var token: String?) {
         return (0 until (arr?.length() ?: 0)).map { arr!!.getString(it) }
     }
 
-    /** Ajustes nuevos para Ludolog: la consola los deja y Ludolog los aplica ella misma. */
     /** Una correccion de un juego o una consola (ver MetaEdits en la consola): la aplica y la pasa a las demas. */
     fun metaEdit(kind: String, system: String, path: String, field: String, value: String, t: Long, keys: String = "") =
         sendBytes("POST", "/meta/edit", emptyMap(), JSONObject().put("kind", kind).put("system", system).put("path", path)
             .put("field", field).put("value", value).put("t", t).put("keys", keys).toString().toByteArray(Charsets.UTF_8))
 
+    /** Ajustes nuevos para Ludolog: la consola los deja y Ludolog los aplica ella misma. */
     fun sendConfig(changes: JSONObject) = sendBytes("POST", "/ludolog/config", emptyMap(), changes.toString().toByteArray(Charsets.UTF_8))
+
+    /**
+     * Las claves de las fuentes de arte de Ludolog en la consola: sus fechas y, cerradas para [pub],
+     * las claves (ver KeyBox, y ArtKeys en la consola). 404 si su Link o su Ludolog son anteriores.
+     */
+    fun keys(pub: String): JSONObject = call("GET", "/ludolog/keys", mapOf("pub" to pub))
+
+    /** Claves mas nuevas para la consola, cerradas para su publica: cuantas tomo Ludolog. */
+    fun putKeys(body: JSONObject): Int =
+        sendBytes("POST", "/ludolog/keys", emptyMap(), body.toString().toByteArray(Charsets.UTF_8)).optInt("changed")
 
     /** Que juegos tienen arte y video en la consola: claves «consola/nombre» en minusculas. */
     fun art(): Pair<Set<String>, Set<String>> {

@@ -27,7 +27,10 @@ import java.util.zip.ZipOutputStream
  * emulador y archivo), que tiene la historia de antes.
  *
  * Todo lo de Link (ajustes de partidas, bases, conflictos, respaldos) vive fuera de la app, en
- * `<memoria interna>/LudologLink/`: se ve, y sobrevive a reinstalar.
+ * `<memoria interna>/LudologLink/`: se ve, y sobrevive a reinstalar. Ahi: `state/saves.json` (los
+ * emuladores), `state/base/<device>/<paquete>.json` (la base con cada device), `state/conflicts.json`,
+ * `state/hash/<paquete>.json` (huellas ya calculadas) y `save-backups/<paquete>/<fecha>-<motivo>.bak`.
+ * En Link Dev la carpeta es LudologLinkDev (ver Dev.folder).
  */
 data class EmuSaves(
     val pkg: String,
@@ -42,16 +45,29 @@ data class EmuSaves(
     val lastBackup: Long = 0,
     val lastSync: Long = 0,
     val note: String = "",
+    /**
+     * Modo flexible: tambien se sincroniza con OTRA app de otra consola (un fork, otro repositorio
+     * del mismo emulador), si alla tambien esta en flexible y con la misma [group]. Pedido del
+     * usuario (10-10-2026), uno por uno. Las partidas de otra app pueden no ser compatibles: se avisa.
+     */
+    val relaxed: Boolean = false,
+    /** Con que se empareja en modo flexible: la consola (su id, como `3ds`). Ver [Saves.stateQuery]. */
+    val group: String = "",
 ) {
     val configured get() = path.isNotEmpty()
     val folder get() = File(path)
 
+    /** En modo flexible y con consola elegida: lo unico que cambia algo al sincronizar. */
+    val flexible get() = relaxed && group.isNotEmpty()
+
     fun json(): JSONObject = JSONObject().put("pkg", pkg).put("path", path).put("every", every).put("keep", keep)
         .put("played", played).put("lastBackup", lastBackup).put("lastSync", lastSync).put("note", note)
+        .put("relaxed", relaxed).put("group", group)
 
     companion object {
         fun of(j: JSONObject) = EmuSaves(j.getString("pkg"), j.optString("path"), j.optString("every", "daily"),
-            j.optInt("keep", 7), j.optLong("played"), j.optLong("lastBackup"), j.optLong("lastSync"), j.optString("note"))
+            j.optInt("keep", 7), j.optLong("played"), j.optLong("lastBackup"), j.optLong("lastSync"), j.optString("note"),
+            j.optBoolean("relaxed"), j.optString("group"))
 
         val PERIODS = linkedMapOf("off" to 0L, "hourly" to 3_600_000L, "daily" to 86_400_000L, "weekly" to 7 * 86_400_000L)
     }
@@ -73,6 +89,8 @@ data class SaveConflict(
     val minePlayed: Long,
     val theirsPlayed: Long,
     val found: Long,
+    /** El emulador de la otra consola: otro que [pkg] solo en modo flexible (ver EmuSaves.relaxed). */
+    val peerPkg: String = pkg,
 ) {
     val key get() = "$peerId|$pkg|$game"
 
@@ -123,6 +141,58 @@ object Saves {
     @Synchronized
     fun update(ctx: Context, pkg: String, f: (EmuSaves) -> EmuSaves) = save(ctx, f(get(ctx, pkg) ?: EmuSaves(pkg)))
 
+    // ------------------------------------------------------- modo flexible
+
+    /**
+     * Lo que se le pregunta a otra consola por un emulador (/saves/state): su paquete y, en modo
+     * flexible, su consola, para que alla conteste con el suyo si no tiene este (ver [forState]).
+     */
+    fun stateQuery(ctx: Context, pkg: String): Map<String, String> {
+        val e = get(ctx, pkg)
+        return if (e?.flexible == true) mapOf("pkg" to pkg, "group" to e.group) else mapOf("pkg" to pkg)
+    }
+
+    /**
+     * El emulador de aqui que contesta por [pkg]: el mismo, si tiene carpeta; si no, y quien pregunta
+     * va en modo flexible con [group], uno de aqui con carpeta, tambien flexible y con la misma
+     * consola. Lo eligen las dos: con una sola en flexible no se cruza nada.
+     */
+    fun forState(ctx: Context, pkg: String, group: String?): EmuSaves? {
+        get(ctx, pkg)?.takeIf { it.configured }?.let { return it }
+        if (group.isNullOrEmpty()) return null
+        val want = canonicalSystem(ctx, group)
+        return all(ctx).firstOrNull { it.configured && it.flexible && canonicalSystem(ctx, it.group) == want }
+    }
+
+    /**
+     * El catalogo de consolas de Ludolog (su systems.toml, compilado con Link tal cual): da los ids
+     * con que empareja el modo flexible y sus nombres. Leido una vez.
+     */
+    @Volatile private var catalog: com.felp.frontcomp.Catalog? = null
+
+    fun catalog(ctx: Context): com.felp.frontcomp.Catalog? = catalog ?: runCatching {
+        // Con las consolas que el usuario anadio en Ludolog, como las ve Ludolog (CatalogLoader).
+        Ludolog.dataDir(ctx)?.let { com.felp.frontcomp.DataHome.dir = it }
+        com.felp.frontcomp.CatalogLoader.load { name -> ctx.assets.open(name).bufferedReader().use { it.readText() } }
+    }.getOrNull()?.also { catalog = it }
+
+    /** El id de Ludolog de una consola nombrada como sea (`n3ds` y `3ds` son la misma). */
+    fun canonicalSystem(ctx: Context, name: String): String = catalog(ctx)?.canonicalId(name) ?: name.lowercase()
+
+    /** La base con otra app alla (modo flexible) va aparte de la de la misma app: ver SaveSync.syncOne. */
+    fun baseKey(pkg: String, theirPkg: String) = if (pkg == theirPkg) pkg else "$pkg~$theirPkg"
+
+    /**
+     * La consola mas probable de un emulador, para el modo flexible: la que mas abrio Ludolog con el,
+     * o, si nunca lo abrio, la de su familia conocida (SaveScan.systemOf). Nula si no se sabe.
+     */
+    fun likelySystem(ctx: Context, pkg: String): String? = systemsOf(ctx, pkg).firstOrNull() ?: SaveScan.systemOf(pkg)
+
+    /** Las consolas en que Ludolog abrio juegos con ese emulador, la mas usada primero: la consola sugerida del modo flexible. */
+    fun systemsOf(ctx: Context, pkg: String): List<String> =
+        playedLog(ctx).filter { it.kind == 'S' && it.pkg == pkg && it.system.isNotEmpty() }
+            .groupingBy { it.system.lowercase() }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+
     // ------------------------------------------------------- base y conflictos
 
     private fun baseFile(peerId: String, pkg: String) = state("base/$peerId/$pkg.json")
@@ -156,10 +226,12 @@ object Saves {
         return (0 until a.length()).mapNotNull { i ->
             runCatching {
                 val j = a.getJSONObject(i)
-                SaveConflict(j.getString("peer"), j.optString("peerName"), j.getString("pkg"), j.getString("game"),
+                val pkg = j.getString("pkg")
+                SaveConflict(j.getString("peer"), j.optString("peerName"), pkg, j.getString("game"),
                     j.getJSONArray("files").let { f -> (0 until f.length()).map { f.getString(it) } },
                     sizes(j.optJSONObject("mine")), sizes(j.optJSONObject("theirs")),
-                    j.optLong("minePlayed"), j.optLong("theirsPlayed"), j.optLong("found"))
+                    j.optLong("minePlayed"), j.optLong("theirsPlayed"), j.optLong("found"),
+                    j.optString("peerPkg").ifEmpty { pkg })
             }.getOrNull()
         }
     }
@@ -169,6 +241,7 @@ object Saves {
             JSONObject().put("peer", c.peerId).put("peerName", c.peerName).put("pkg", c.pkg).put("game", c.game)
                 .put("files", JSONArray(c.files)).put("mine", JSONObject(c.mine)).put("theirs", JSONObject(c.theirs))
                 .put("minePlayed", c.minePlayed).put("theirsPlayed", c.theirsPlayed).put("found", c.found)
+                .put("peerPkg", c.peerPkg)
         })
         writeJson(state("conflicts.json"), a)
         LinkState.post { LinkState.savesChanged.intValue++ }
@@ -277,11 +350,20 @@ object Saves {
     /** Un cierre que llego en vivo (GAME_CLOSED). */
     fun played(ctx: Context, pkg: String, at: Long) = update(ctx, pkg) { it.copy(played = maxOf(it.played, at)) }
 
-    /** Si ese emulador tiene un juego abierto ahora (un S sin su E, de hace menos de 12 h). */
+    /**
+     * Si ese emulador tiene un juego abierto ahora: el ultimo juego que abrio Ludolog es suyo, sin su
+     * E, y de hace menos de 12 h.
+     *
+     * El ultimo de TODOS, no el ultimo de ese emulador: Ludolog sigue un juego a la vez, y al abrir
+     * otro cierra el anterior. Un S de antes de otro juego es uno que se quedo sin cerrar (Android
+     * mato a Ludolog con el juego abierto), y contaba como abierto doce horas: en una consola, una S
+     * de melonDS asi no dejaba elegir en un conflicto aunque despues se jugara a otras cosas (prueba
+     * del usuario, 10-10-2026). Ludolog ademas escribe ahora ese cierre al volver a arrancar.
+     */
     fun inUse(ctx: Context, pkg: String): Boolean {
-        val mine = playedLog(ctx).filter { it.pkg == pkg }
-        val lastOpen = mine.lastOrNull { it.kind == 'S' } ?: return false
-        val closedAfter = mine.any { it.kind == 'E' && it.at >= lastOpen.at }
+        val rows = playedLog(ctx)
+        val lastOpen = rows.lastOrNull { it.kind == 'S' }?.takeIf { it.pkg == pkg } ?: return false
+        val closedAfter = rows.any { it.kind == 'E' && it.pkg == pkg && it.at >= lastOpen.at }
         return !closedAfter && System.currentTimeMillis() - lastOpen.at < 12 * 3_600_000L
     }
 
@@ -291,17 +373,18 @@ object Saves {
     // -------------------------------------------------------- los archivos
 
     /**
-     * Los archivos de la carpeta: ruta relativa, tamaño y huella SHA-1 del contenido. La huella se
-     * guarda por (tamaño, fecha local) para no leer otra vez lo que no cambio: la fecha solo sirve
-     * de atajo aqui, nunca para decidir.
-     */
-    /**
      * Un candado por emulador para lo largo (huellas, respaldos). Con el de todo Saves, una huella de
      * una carpeta grande dejaba esperando a la pantalla y al aviso de "juego cerrado".
      */
     private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
     private fun lockFor(pkg: String) = locks.getOrPut(pkg) { Any() }
 
+    /**
+     * Los archivos de la carpeta: ruta relativa, tamaño y huella SHA-1 del contenido. La huella se
+     * guarda por (tamaño, fecha local) para no leer otra vez lo que no cambio: la fecha solo sirve
+     * de atajo aqui, nunca para decidir. Lista TODO lo que hay dentro: por eso nunca se propone una
+     * carpeta de ROMs como carpeta de partidas (ver SaveScan).
+     */
     fun manifest(e: EmuSaves): JSONArray = synchronized(lockFor(e.pkg)) { manifestLocked(e) }
 
     private fun manifestLocked(e: EmuSaves): JSONArray {

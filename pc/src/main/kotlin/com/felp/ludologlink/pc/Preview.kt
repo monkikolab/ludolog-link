@@ -37,6 +37,10 @@ import java.util.concurrent.ConcurrentHashMap
  * La consola da el archivo de donde lo encontraria Ludolog (tambien de ES-DE): ver
  * GET /ludolog/preview. Se guarda en la carpeta temporal mientras dure la sesion; cuando el arte
  * de esa consola cambia (ver AppState.loadArt), se olvida.
+ *
+ * La lista de ROMs ya no existe: hoy la piden los iconos de caratula y video de la tabla de Games
+ * (PartIcon, en CatalogView.kt) y el panel del juego, y CompanionCoversPc para sus miniaturas.
+ * Lo que ya esta en el PC (el catalogo) se ve con FilePreview, sin pasar por la consola.
  */
 object Previews {
     private val dir = File(System.getProperty("java.io.tmpdir"), "ludolog-link-preview").apply { mkdirs() }

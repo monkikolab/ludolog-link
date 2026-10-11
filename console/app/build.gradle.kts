@@ -28,11 +28,18 @@ val hasSigning = keystoreProperties.getProperty("storeFile") != null
 // en el PC). Ver docs/ludolog-link.md en ludolog-front-end.
 val ludologShared by tasks.registering(Sync::class) {
     from("$frontEnd/app/src/main/java/com/felp/frontcomp") {
-        include("ThemeData.kt", "CrtParams.kt", "Ornaments.kt", "Pixel.kt")
+        // Y su catalogo de consolas (Catalog, Toml): el modo flexible de las partidas empareja por la
+        // consola, con los ids de Ludolog y no con los nombres de carpeta (n3ds y 3ds son la misma).
+        include("ThemeData.kt", "CrtParams.kt", "Ornaments.kt", "Pixel.kt", "Catalog.kt", "Toml.kt")
     }
     into(layout.buildDirectory.dir("ludolog-src/com/felp/frontcomp"))
 }
-tasks.named("preBuild") { dependsOn(ludologShared) }
+// El systems.toml de Ludolog, el mismo archivo, como asset (como en el PC).
+val ludologAssets by tasks.registering(Sync::class) {
+    from("$frontEnd/app/src/main/assets") { include("systems.toml") }
+    into(layout.buildDirectory.dir("ludolog-assets"))
+}
+tasks.named("preBuild") { dependsOn(ludologShared, ludologAssets) }
 
 android {
     namespace = "com.felp.ludologlink"
@@ -97,6 +104,7 @@ android {
         "../../kit/src/compose/kotlin",
         "build/ludolog-src",
     )
+    sourceSets["main"].assets.srcDirs("build/ludolog-assets")
     // MANAGE_EXTERNAL_STORAGE dispara avisos de lint pensados para la Play Store;
     // esta app se instala a mano.
     lint { checkReleaseBuilds = false; abortOnError = false }

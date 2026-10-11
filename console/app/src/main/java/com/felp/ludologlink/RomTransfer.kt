@@ -90,7 +90,10 @@ object RomTransfer {
 
     val jobs = mutableStateListOf<Job>()
 
-    /** Cuantas van ahora: el servicio no se duerme mientras haya alguna (ver LinkService). */
+    /**
+     * Cuantas van ahora. Nada lo lee fuera de aqui: lo que mantiene despiertos la CPU y el Wi-Fi
+     * mientras haya cola son los bloqueos propios de [kick], no LinkService.
+     */
     @Volatile var active = 0; private set
 
     fun get(ctx: Context, p: Peer, g: RemoteGame) {

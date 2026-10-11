@@ -46,6 +46,12 @@ import java.util.Date
 import java.util.Locale
 import java.util.zip.ZipFile
 
+// SaveManager.kt: la pestaña Saves de un device. Solo lee lo que ya esta en este PC
+// (SaveBackups.dir: `saves/<paquete>/` junto a sus respaldos, ver Backup.kt); lo nuevo lo baja
+// AppState.fetchSaveBackups, y devolver una version lo hace AppState.restoreSave, con las rutas
+// /saves/state, /saves/begin, /saves/file y /saves/end. Aqui: SaveArchive (abrir y agrupar los
+// .bak), SavesManagerView (emuladores, juegos, versiones) y RestoreSaveDialog (a que device).
+
 /**
  * Los respaldos de partidas (.bak) que el PC bajo de un device (ver SaveBackups), abiertos: cada
  * uno es un zip con la carpeta de partidas del emulador en un momento. Aqui se ordenan por juego,

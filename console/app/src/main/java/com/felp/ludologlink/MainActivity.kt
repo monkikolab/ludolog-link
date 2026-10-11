@@ -63,6 +63,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+/**
+ * La unica actividad de Link. La primera vez, sin nada emparejado, el wizard (SetupWizard); despues,
+ * cuatro pestañas: Link (estado, PC Link, devices emparejados, carpeta de ROMs, PCs, ajustes y
+ * actividad), Saves (SavesScreen), ROMs (RomsScreen) y Log (LogScreen). Todo con el aspecto de
+ * Ludolog en esta consola ([currentLook], LudologLook). Mientras esta a la vista (LinkState.uiVisible)
+ * Link escucha siempre, para poder emparejar, y los conflictos de partidas salen en su ventana
+ * (ConflictsPopup) en vez de en la notificacion, que abre aqui la pestaña Saves.
+ */
 class MainActivity : ComponentActivity() {
 
     private var storageOk by mutableStateOf(false)
@@ -77,7 +85,10 @@ class MainActivity : ComponentActivity() {
     private var aboutBusy by mutableStateOf(false)
     private var aboutNote by mutableStateOf<String?>(null)
     private var updates by mutableStateOf(true)
-    /** La pestaña que se ve: link (lo de siempre), saves (partidas guardadas) o roms (traer ROMs de otro device). */
+    /**
+     * La pestaña que se ve: link (lo de siempre), saves (partidas guardadas), roms (traer ROMs de otro
+     * device o pedirlos al PC) o log (la actividad de este device y de los emparejados).
+     */
     private var tab by mutableStateOf("link")
     /** El wizard del primer arranque, en vez de la pantalla (ver SetupWizard). */
     private var setup by mutableStateOf(false)

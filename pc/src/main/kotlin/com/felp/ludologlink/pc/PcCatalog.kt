@@ -15,6 +15,11 @@ import java.io.File
  *
  * Por defecto `roms` en la carpeta de datos (07-10-2026; antes no habia hasta elegir una), y se
  * cambia en Settings. Ver CatalogView.
+ *
+ * Se ve como la columna "PC catalog" de Games (GamesView, con las filas de catalogRows en
+ * CatalogView.kt); los devices piden de el por CatalogRequests. En `media/info.json` van los
+ * nombres y descripciones corregidos (CatalogInfo, en GameInfo.kt). Lo que se escribe aqui lo
+ * hace AppState (romToCatalog, mediaToCatalog, deleteFromCatalog...), que luego llama a [forget].
  */
 object PcCatalog {
 
@@ -23,8 +28,8 @@ object PcCatalog {
 
     /**
      * La carpeta elegida, este o no ahora. Puede estar en un disco externo: si se desconecta, el
-     * catalogo se da por ausente (sin error) y vuelve solo al reconectarlo (CatalogView lo mira
-     * cada pocos segundos).
+     * catalogo se da por ausente (sin error) y vuelve solo al reconectarlo (GamesView lo mira
+     * cada 10 s).
      */
     val configured: File get() = Config.path(KEY)?.let(::File) ?: File(Config.dataRoot, "roms")
 
@@ -66,6 +71,9 @@ object PcCatalog {
 
     private var last: Pair<Scan, Long>? = null
 
+    /** Link acaba de escribir o borrar en el catalogo: la proxima lectura, de verdad, sin la guardada. */
+    fun forget() = synchronized(this) { last = null }
+
     /**
      * La ultima lectura de [d] si tiene menos de [maxAgeMs]; si no, una nueva. La tabla del catalogo y
      * la cola de pedidos leian la carpeta cada una por su lado, y es un disco que puede ser lento.
@@ -75,11 +83,20 @@ object PcCatalog {
         return scanOrNull(d)
     }
 
+    /**
+     * Lo que Link escribe de paso mientras baja algo: `.part` con lo que va llegando, `.part.id` con
+     * de que archivo es (para retomarlo, ver Link.download), `.dl` del arte. Ninguno es un juego: el
+     * `.part.id` de una descarga grande salia en la tabla como uno mas (10-10-2026).
+     */
+    private fun partial(name: String) = name.lowercase().let {
+        it.endsWith(".part") || it.endsWith(".part.id") || it.endsWith(".dl") || it.endsWith(Protocol.PART_SUFFIX)
+    }
+
     private fun scan(d: File): Scan {
         val roms = ArrayList<RomFile>()
         // La de medios no es una consola (con cualquier mayuscula: Windows no las distingue).
         for (sys in d.listFiles().orEmpty().filter { it.isDirectory && !it.name.startsWith(".") && !it.name.equals(MEDIA, true) }) {
-            sys.walkTopDown().filter { it.isFile && !it.name.startsWith(".") && !it.name.endsWith(".part") }.forEach { f ->
+            sys.walkTopDown().filter { it.isFile && !it.name.startsWith(".") && !partial(it.name) }.forEach { f ->
                 val rel = f.relativeTo(sys).invariantSeparatorsPath
                 val r = RomFile(sys.name, rel, f.length(), f.lastModified())
                 if (!Shortcuts.isShortcut(r) && !Shortcuts.isLocked(r)) roms += r
@@ -103,7 +120,8 @@ object PcCatalog {
 
     /**
      * Los catalogos de consolas con que se reconocen los juegos del catalogo: los de los devices
-     * conectados (cada uno con sus consolas propias). Los pone CatalogView.
+     * conectados (cada uno con sus consolas propias). Los ponen catalogRows (CatalogView.kt) y
+     * CatalogRequests.
      */
     @Volatile var catalogs: List<com.felp.frontcomp.Catalog> = emptyList()
 

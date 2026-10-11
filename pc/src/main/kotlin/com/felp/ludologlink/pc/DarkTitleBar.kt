@@ -14,6 +14,11 @@ import androidx.compose.ui.text.platform.Font
 import com.felp.frontcomp.Theme
 import java.io.File
 
+// DarkTitleBar.kt: la ventana con el tema de Ludolog, en lo que Compose no llega. La barra de
+// titulo de Windows (titleBar, por DWM con JNA) y las letras del tema (rememberThemeFonts y
+// ThemeFonts), guardadas en Config.themeDir: `themes/<id>/font/` en PcDirs.home. Los dos los usa
+// Main.kt. Al final, `files`, un texto suelto que usa Overview.
+
 /** La barra de titulo de Windows con el fondo del tema (modo oscuro en Windows 10 20H1+; el color, solo Windows 11). */
 private interface DwmApi : Library {
     fun DwmSetWindowAttribute(hwnd: Pointer, attribute: Int, value: IntByReference, size: Int): Int

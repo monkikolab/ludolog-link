@@ -35,6 +35,13 @@ import androidx.compose.ui.unit.sp
 import com.felp.ludolog.kit.Format
 import com.felp.ludolog.kit.Protocol
 
+// Dialogs.kt: dialogos sueltos que se abren desde varias pantallas.
+//   PairDialog     el codigo de 6 cifras que enseña el device (AppState.startPairing lo pide y
+//                  confirmPairing lo comprueba); lo abre Main.kt mientras AppState.pairing no es nulo.
+//   RenameDialog   el nombre en Ludolog y el del archivo (desde Games; ver AppState.renameBoth).
+//   DeleteDialog   borrar ROMs de un device (para siempre) o del catalogo del PC (a la Papelera).
+
+/** Emparejar: el codigo que enseña el device, una sola vez por PC. */
 @Composable
 fun PairDialog(app: AppState, e: ConsoleEntry) {
     var code by remember { mutableStateOf("") }
@@ -149,18 +156,24 @@ fun RenameDialog(
     )
 }
 
+/**
+ * Borrar ROMs de [place] (un device o el catalogo del PC). En un device es para siempre; en el
+ * catalogo del PC van a la Papelera de reciclaje ([recycle]).
+ */
 @Composable
-fun DeleteDialog(e: ConsoleEntry, files: List<RomFile>, onClose: () -> Unit, onDelete: () -> Unit) {
+fun DeleteDialog(place: String, files: List<RomFile>, onClose: () -> Unit, recycle: Boolean = false, onDelete: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(if (files.size == 1) "Delete from ${e.name}?" else "Delete ${files.size} files from ${e.name}?") },
+        title = { Text(if (files.size == 1) "Delete from $place?" else "Delete ${files.size} files from $place?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 files.take(8).forEach {
                     Text("${it.system}/${it.name}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                 }
                 if (files.size > 8) Text("and ${files.size - 8} more", style = MaterialTheme.typography.bodySmall)
-                Text("Frees ${Format.size(files.sumOf { it.size })}. Permanent, with its .sbi.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Frees ${Format.size(files.sumOf { it.size })}. " +
+                    if (recycle) "Goes to the Recycle Bin, with its .sbi. Its art stays." else "Permanent, with its .sbi.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = { LTextButton(onClick = onDelete) { Text("Delete", color = Look.danger) } },

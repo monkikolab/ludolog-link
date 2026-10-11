@@ -30,6 +30,9 @@ import java.io.File
  * piden de archivos que el PC no compila (Modal.kt, Focus.kt, Sfx.kt, Theme.kt, Art.kt), en
  * version de escritorio: raton en vez de mando y sin sonidos. Mismo nombre y paquete, para que
  * esas pestanas compilen tal cual. Ver ludolog-front-end/docs/ludolog-link.md.
+ *
+ * Ademas, piezas sueltas de Motion.kt (Motion) y de StatsWindow.kt (categorical). Las pinta
+ * CompanionView.kt, que hace aqui de StatsWindow.
  */
 
 /** Los sonidos de la interfaz. El PC no suena. */

@@ -8,8 +8,8 @@ import com.felp.ludolog.kit.Protocol
  * Es otro paquete (`.dev`, ver build.gradle.kts) y le habla a Ludolog Dev y no a la oficial: el
  * paquete de Ludolog, su carpeta de datos y el permiso del puente salen de BuildConfig. Aqui, lo
  * demas que tiene que ser suyo en el mismo aparato: los puertos, corridos Protocol.DEV_PORT_OFFSET
- * (las dos escuchan a la vez, y cada una solo encuentra a las de su clase), la carpeta de respaldos
- * de partidas y el nombre con que se presenta.
+ * (las dos escuchan a la vez, y cada una solo encuentra a las de su clase), su carpeta en la memoria
+ * interna (estado y respaldos de partidas) y el nombre con que se presenta.
  */
 object Dev {
     const val ON = BuildConfig.DEV
@@ -20,6 +20,9 @@ object Dev {
     /** Como se llama en la notificacion, la cabecera y el panel rapido. */
     val name = if (ON) "Ludolog Link Dev" else "Ludolog Link"
 
-    /** Su carpeta en la memoria interna (respaldos de partidas): ver Saves.home. */
+    /**
+     * Su carpeta en la memoria interna: state/ (emuladores, bases, conflictos, huellas, pedidos al
+     * catalogo del PC) y save-backups/ (respaldos de partidas). Ver Saves.home.
+     */
     val folder = if (ON) "LudologLinkDev" else "LudologLink"
 }

@@ -34,6 +34,11 @@ import kotlin.concurrent.thread
  * partida del Companion, al encenderse). Quieto casi no gasta: un servidor esperando no usa CPU.
  * Lo que gasta es oir las busquedas del PC con la pantalla apagada (el bloqueo de multicast), y eso
  * va solo con PC Link, que se apaga solo tras Prefs.idleMinutes sin que el PC haga nada.
+ *
+ * Abre HttpServer (Dev.httpPort) y contesta a las busquedas por UDP (Dev.discoveryPort). De Ludolog
+ * escucha, solo con su permiso de firma: GAME_CLOSED (sus partidas a SaveSync, con espera),
+ * COMPANION_CHANGED, EDITS_CHANGED y KEYS_CHANGED (una pasada de CompanionShare). Cada hora, los
+ * respaldos que toquen (Saves.scheduled). Le avisa a Ludolog con Ludolog.linkState (STATE).
  */
 class LinkService : Service(), TransferHooks {
 
@@ -113,6 +118,8 @@ class LinkService : Service(), TransferHooks {
      * firma (Ludolog). Con compartir apagado no sale nada (CompanionShare.syncAll lo mira).
      */
     private val shareSoon = Runnable { CompanionShare.syncAll(this, "new session") }
+    /** Igual, cuando lo que cambio en Ludolog es una clave de las fuentes de arte (KEYS_CHANGED, ver ArtKeys). */
+    private val keysSoon = Runnable { CompanionShare.syncAll(this, "art source keys changed") }
 
     /** Emuladores cerrados hace poco, a la espera de mandar sus partidas (ver SaveSync). */
     private val closed = java.util.Collections.synchronizedSet(HashSet<String>())
@@ -169,8 +176,9 @@ class LinkService : Service(), TransferHooks {
             // Una correccion en Ludolog (EDITS_CHANGED): a su registro, y se comparte como una partida.
             if (i.action == "com.felp.frontcomp.link.EDITS_CHANGED")
                 kotlin.concurrent.thread(isDaemon = true) { runCatching { MetaEdits.ingest(this@LinkService) } }
-            handler.removeCallbacks(shareSoon)
-            handler.postDelayed(shareSoon, 5_000)
+            val soon = if (i.action == "com.felp.frontcomp.link.KEYS_CHANGED") keysSoon else shareSoon
+            handler.removeCallbacks(soon)
+            handler.postDelayed(soon, 5_000)
         }
     }
     @Volatile private var transferring = 0
@@ -246,8 +254,10 @@ class LinkService : Service(), TransferHooks {
         LinkState.post { LinkState.running.value = true }
         LinkState.addLog("Listening at $address")
 
+        // KEYS_CHANGED: una clave de las fuentes de arte nueva en Ludolog, que se comparte igual (ver ArtKeys).
         registerReceiver(companionReceiver, android.content.IntentFilter().apply {
             addAction("com.felp.frontcomp.link.COMPANION_CHANGED"); addAction("com.felp.frontcomp.link.EDITS_CHANGED")
+            addAction("com.felp.frontcomp.link.KEYS_CHANGED")
         },
             SaveCheckProvider.PERMISSION, null, Context.RECEIVER_EXPORTED)
         registerReceiver(gameReceiver, android.content.IntentFilter().apply {
@@ -442,6 +452,7 @@ class LinkService : Service(), TransferHooks {
         handler.removeCallbacks(savesOnStart)
         handler.removeCallbacks(idleCheck)
         handler.removeCallbacks(shareSoon)
+        handler.removeCallbacks(keysSoon)
         runCatching { unregisterReceiver(companionReceiver) }
         handler.removeCallbacks(savesSoon)
         handler.removeCallbacks(backupTick)

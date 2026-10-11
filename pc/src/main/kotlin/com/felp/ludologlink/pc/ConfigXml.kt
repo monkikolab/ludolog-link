@@ -48,7 +48,10 @@ object ConfigXml {
     }
 }
 
-/** Diagnostico: ROMManager --companion <copia de la carpeta Ludolog> <modelo>. Imprime lo que veria el Companion. */
+/**
+ * Diagnostico: "Ludolog Link.exe" --companion <copia de la carpeta Ludolog> <modelo>. Imprime lo que
+ * veria el Companion.
+ */
 internal fun companionTest(dir: File, model: String) {
     val config = ConfigXml.read(File(dir, "config.xml"))
     val t0 = System.currentTimeMillis()

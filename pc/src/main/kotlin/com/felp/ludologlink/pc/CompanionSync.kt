@@ -12,6 +12,9 @@ import java.io.File
  * tambien la que cuenta si se restauro hacia atras. Si no lo esta, la mas reciente que haya en
  * las demas, por su contenido. El cuaderno propio de una consola nunca se le cambia; la consola,
  * ademas, se niega.
+ *
+ * Aqui solo se decide ([plan]); lo hace AppState.syncCompanions (boton "Sync companions" de la
+ * barra lateral), que manda cada cuaderno con PUT /ludolog/companion (Link.putLogbook).
  */
 object CompanionSync {
 

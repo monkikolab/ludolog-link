@@ -20,6 +20,9 @@ import kotlin.math.roundToInt
  *
  * Ludolog copia el sonido tal cual porque lo que baja ya es .mp4; aqui puede venir cualquier
  * cosa, asi que se pasa a AAC. En la consola no se vuelve a tocar.
+ *
+ * Lo usan AppState (importVideo, mediaEverywhere, fill: videos del PC o del catalogo a un device) y
+ * la imitacion de VideoScale del scraper (LudologScrapeShims.kt). FFmpeg llega por JavaCV.
  */
 object VideoPrep {
 

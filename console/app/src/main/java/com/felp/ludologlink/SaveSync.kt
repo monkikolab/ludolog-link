@@ -28,6 +28,13 @@ import kotlin.concurrent.thread
  * - Nada se borra en el otro lado. Antes de escribir, la que recibe respalda su carpeta. Con un juego
  *   abierto en ese emulador, no se le escribe: se intenta la siguiente vez.
  * Lo que se pregunta va agrupado por juego (Saves.saveKey) y se elige en la pestaña SAVES.
+ *
+ * Lo llaman LinkService (al cerrarse un juego, GAME_CLOSED, y al encenderse), SaveCheck ([syncNow],
+ * antes de jugar) y SavesUi (a mano, y [resolve] de los conflictos). A la otra consola le pide
+ * /saves/state y /saves/manifest, y para escribir alla /saves/begin, PUT /saves/file y /saves/end,
+ * que fija la base en las dos (ver HttpServer.savesRoute).
+ * Mapa: entrada ([syncAll], [syncNow]); reglas ([plan]); una pasada ([syncOne], [send], [fetch],
+ * [agree]); conflictos ([resolveMany] y su aviso, [notifyConflicts]).
  */
 object SaveSync {
     private val busy = AtomicBoolean(false)
@@ -156,7 +163,9 @@ object SaveSync {
 
     // ------------------------------------------------------------ una pasada
 
-    private fun state(p: Peer, pkg: String) = Peers.json(Peers.open(p.host, p.port, "GET", "/saves/state", mapOf("pkg" to pkg), p.token))
+    /** Con la consola del modo flexible si va en el (ver Saves.stateQuery): alla puede contestar otro emulador. */
+    private fun state(ctx: Context, p: Peer, pkg: String) =
+        Peers.json(Peers.open(p.host, p.port, "GET", "/saves/state", Saves.stateQuery(ctx, pkg), p.token))
 
     private fun plays(j: JSONObject?) = j?.keys()?.asSequence()?.associateWith { j.getLong(it) }.orEmpty()
 
@@ -182,34 +191,40 @@ object SaveSync {
         val here = given ?: Here.of(ctx, Saves.get(ctx, pkg)?.takeIf { it.configured } ?: return "no folder here")
         val mine = here.mine
         if (!here.supported) return "not supported here"
-        val st = state(p, pkg)
+        val st = state(ctx, p, pkg)
         if (!st.optBoolean("configured")) return "no folder set there"
         if (!st.optBoolean("supported", true)) return "not supported there"
-        val remote = byPath(remoteManifest(p, pkg))
+        // El de alla: el mismo, o en modo flexible otra app (ver Saves.forState). Una respuesta de un Link
+        // anterior no lo dice: el mismo.
+        val theirPkg = st.optString("pkg").ifEmpty { pkg }
+        val remote = byPath(remoteManifest(p, theirPkg))
         val local = here.local()
-        val (since, base) = Saves.base(p.id, pkg)
+        // Con otra app alla (modo flexible), su propia base: la de cuando alla estaba la misma no vale.
+        val (since, base) = Saves.base(p.id, Saves.baseKey(pkg, theirPkg))
         val myPlays = here.plays
         val theirPlays = plays(st.optJSONObject("games"))
         val plan = plan(local, remote, base, base.isNotEmpty(), myPlays, since, theirPlays, st.optLong("syncedAt"), force)
 
         val notes = ArrayList<String>()
+        // Con otra app alla, dicho siempre: sus partidas pueden no ser compatibles.
+        val withApp = if (theirPkg != pkg) "with ${st.optString("app").ifEmpty { theirPkg }}: " else ""
         var push = plan.push
         var pull = plan.pull
         if (push.isNotEmpty() && st.optBoolean("inUse")) { notes += "open there, later"; push = emptyList() }
         if (pull.isNotEmpty() && Saves.inUse(ctx, pkg)) { notes += "open here, later"; pull = emptyList() }
-        send(p, mine, push)
-        fetch(ctx, p, mine, pull, remote)
+        send(p, mine, theirPkg, push)
+        fetch(ctx, p, mine, theirPkg, pull, remote)
         if (pull.isNotEmpty()) here.stale = true
         // La base es lo que se comparo o se mando, no lo que haya ahora: si el emulador guardo a
         // mitad, ese archivo no queda como igual (ver agree).
-        agree(ctx, p, mine, plan.agreed.associateWith { local.getValue(it) } + push.associateWith { local.getValue(it) } +
+        agree(ctx, p, mine, theirPkg, plan.agreed.associateWith { local.getValue(it) } + push.associateWith { local.getValue(it) } +
             pull.associateWith { remote.getValue(it) }, recheck = push.isNotEmpty() || pull.isNotEmpty())
         Saves.setConflicts(ctx, p, pkg, plan.ask.map { (game, files) ->
             SaveConflict(p.id, p.name, pkg, game, files,
                 files.mapNotNull { f -> local[f]?.let { f to it.optLong("size") } }.toMap(),
                 files.mapNotNull { f -> remote[f]?.let { f to it.optLong("size") } }.toMap(),
                 files.maxOf { Saves.playedOf(it, myPlays) }, files.maxOf { Saves.playedOf(it, theirPlays) },
-                System.currentTimeMillis())
+                System.currentTimeMillis(), theirPkg)
         })
         if (push.isNotEmpty()) notes += "sent ${push.size}"
         if (pull.isNotEmpty()) notes += "got ${pull.size}"
@@ -219,19 +234,19 @@ object SaveSync {
         val thereLocked = remote.values.filter { it.optBoolean("unreadable") }.map { it.getString("path") }
         if (hereLocked.isNotEmpty()) notes += "can't read here: ${hereLocked.joinToString()}"
         if (thereLocked.isNotEmpty()) notes += "can't read there: ${thereLocked.joinToString()}"
-        return notes.joinToString(", ").ifEmpty { "in sync" }
+        return withApp + notes.joinToString(", ").ifEmpty { "in sync" }
     }
 
     private fun remoteManifest(p: Peer, pkg: String) =
         Peers.json(Peers.open(p.host, p.port, "GET", "/saves/manifest", mapOf("pkg" to pkg), p.token, 300_000)).optJSONArray("files") ?: JSONArray()
 
     /** Lo de aqui alla: alla se respalda antes (begin). */
-    private fun send(p: Peer, mine: EmuSaves, paths: List<String>) {
+    private fun send(p: Peer, mine: EmuSaves, theirPkg: String, paths: List<String>) {
         if (paths.isEmpty()) return
-        Peers.json(Peers.open(p.host, p.port, "POST", "/saves/begin", mapOf("pkg" to mine.pkg), p.token, 300_000))
+        Peers.json(Peers.open(p.host, p.port, "POST", "/saves/begin", mapOf("pkg" to theirPkg), p.token, 300_000))
         for (path in paths) {
             val f = Saves.fileIn(mine, path) ?: continue
-            val c = Peers.open(p.host, p.port, "PUT", "/saves/file", mapOf("pkg" to mine.pkg, "path" to path), p.token, 120_000)
+            val c = Peers.open(p.host, p.port, "PUT", "/saves/file", mapOf("pkg" to theirPkg, "path" to path), p.token, 120_000)
             c.doOutput = true
             c.setFixedLengthStreamingMode(f.length())
             c.outputStream.use { o -> f.inputStream().use { it.copyTo(o) } }
@@ -240,7 +255,7 @@ object SaveSync {
     }
 
     /** Lo de alla aqui: se respalda lo de aqui antes. Llega entero y con su huella, o no se pone. */
-    private fun fetch(ctx: Context, p: Peer, mine: EmuSaves, paths: List<String>, remote: Map<String, JSONObject>) {
+    private fun fetch(ctx: Context, p: Peer, mine: EmuSaves, theirPkg: String, paths: List<String>, remote: Map<String, JSONObject>) {
         if (paths.isEmpty()) return
         Saves.backup(ctx, mine, "before-sync")
         for (path in paths) {
@@ -250,7 +265,7 @@ object SaveSync {
             // Uno por descarga: dos pasadas a la vez no escriben en el mismo temporal.
             val tmp = File(dest.parentFile, "." + dest.name + "." + System.nanoTime() + Saves.PART)
             try {
-                val c = Peers.open(p.host, p.port, "GET", "/saves/file", mapOf("pkg" to mine.pkg, "path" to path), p.token, 120_000)
+                val c = Peers.open(p.host, p.port, "GET", "/saves/file", mapOf("pkg" to theirPkg, "path" to path), p.token, 120_000)
                 try {
                     if (c.responseCode != 200) Peers.json(c)
                     c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
@@ -272,16 +287,16 @@ object SaveSync {
      * trayendo) se mira que aqui siga igual: uno que el emulador guardo a mitad no entra, y la proxima
      * pasada lo ve cambiado aqui en vez de traer encima la version de alla.
      */
-    private fun agree(ctx: Context, p: Peer, mine: EmuSaves, expected: Map<String, JSONObject>, recheck: Boolean) {
+    private fun agree(ctx: Context, p: Peer, mine: EmuSaves, theirPkg: String, expected: Map<String, JSONObject>, recheck: Boolean) {
         val now = if (recheck) byPath(Saves.manifest(mine)) else null
         val files = JSONArray()
         for ((path, want) in expected) {
             if (now != null && !same(now[path], want)) continue
             files.put(JSONObject().put("path", path).put("size", want.optLong("size")).put("sha1", want.optString("sha1")))
         }
-        Saves.setBase(p.id, mine.pkg, files)
+        Saves.setBase(p.id, Saves.baseKey(mine.pkg, theirPkg), files)
         Saves.dropConflicts(ctx, p.id, mine.pkg, (0 until files.length()).map { files.getJSONObject(it).getString("path") }.toSet())
-        val c = Peers.open(p.host, p.port, "POST", "/saves/end", mapOf("pkg" to mine.pkg), p.token)
+        val c = Peers.open(p.host, p.port, "POST", "/saves/end", mapOf("pkg" to theirPkg), p.token)
         val body = JSONObject().put("files", files).toString().toByteArray(Charsets.UTF_8)
         c.doOutput = true
         c.setFixedLengthStreamingMode(body.size)
@@ -314,23 +329,27 @@ object SaveSync {
                 val peer = Peers.all(app).firstOrNull { it.id == first.peerId } ?: throw IOException("that device isn't paired any more")
                 val p = Peers.reach(app, peer) ?: throw IOException("${peer.name} isn't reachable")
                 val mine = Saves.get(app, first.pkg)?.takeIf { it.configured } ?: throw IOException("no folder here")
-                val st = state(p, first.pkg)
-                val remote = byPath(remoteManifest(p, first.pkg))
+                val st = state(app, p, first.pkg)
+                val theirPkg = st.optString("pkg").ifEmpty { first.peerPkg }
+                val remote = byPath(remoteManifest(p, theirPkg))
                 val local = byPath(Saves.manifest(mine))
                 val files = list.flatMap { it.files }.distinct()
                 val expected: Map<String, JSONObject>
                 if (keepHere) {
-                    if (st.optBoolean("inUse")) throw IOException("a game is open in that emulator on ${p.name}")
+                    // Que hacer, y no solo que pasa: el juego lo da por cerrado Ludolog de ESA consola al volver a el.
+                    if (st.optBoolean("inUse")) throw IOException("${p.name} has a game open in ${Saves.appName(app, first.pkg)}. " +
+                        "Close it there and go back to Ludolog, then try again.")
                     val sent = files.filter { local[it] != null }
-                    send(p, mine, sent)
+                    send(p, mine, theirPkg, sent)
                     expected = sent.associateWith { local.getValue(it) }
                 } else {
-                    if (Saves.inUse(app, first.pkg)) throw IOException("a game is open in that emulator here")
+                    if (Saves.inUse(app, first.pkg)) throw IOException("A game is open in ${Saves.appName(app, first.pkg)} here. " +
+                        "Close it and go back to Ludolog, then try again.")
                     val got = files.filter { remote[it] != null }
-                    fetch(app, p, mine, got, remote)
+                    fetch(app, p, mine, theirPkg, got, remote)
                     expected = got.associateWith { remote.getValue(it) }
                 }
-                agree(app, p, mine, expected, recheck = true)
+                agree(app, p, mine, theirPkg, expected, recheck = true)
                 list.forEach { Saves.dropConflict(app, it) }
                 LinkState.addLog("Saves of ${Saves.appName(app, first.pkg)}: kept ${if (keepHere) "this device's" else "${p.name}'s"} " +
                     list.joinToString { it.title }, "saves")

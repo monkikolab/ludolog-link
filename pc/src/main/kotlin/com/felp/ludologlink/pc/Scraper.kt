@@ -5,6 +5,7 @@ import com.felp.frontcomp.ArtScraper
 import com.felp.frontcomp.Dossiers
 import com.felp.frontcomp.Game
 import com.felp.frontcomp.GameTdbSource
+import com.felp.frontcomp.IgdbSource
 import com.felp.frontcomp.LibretroSource
 import com.felp.frontcomp.LibretroThumbnails
 import com.felp.frontcomp.Prefs
@@ -35,13 +36,19 @@ import com.felp.ludolog.kit.ui.LTextButton
 
 /**
  * El scraper de Ludolog, corriendo en el PC: el mismo codigo (Scrape.kt y sus fuentes, compilados
- * tal cual), con las fuentes libres —libretro, GameTDB, Steam, Switch y los videos de archive.org—.
- * IGDB no: sus claves estan selladas en la consola y no salen de ella.
+ * tal cual) y las mismas fuentes y en el mismo orden que en la consola —libretro, GameTDB, Steam,
+ * Switch, IGDB y los videos de archive.org—. IGDB con las claves del PC (ver PcKeys), que se
+ * escriben una vez en cualquier aparato y Link las pasa a todos (10-10-2026). Como en la consola,
+ * tambien juego a juego eligiendo entre lo encontrado (ver ArtScraper.hunt y ArtPick.kt).
  *
  * Lo encontrado se queda en el PC, en `<respaldos>/<consola>/scrape/media/<consola>/<tipo>/`, con
  * la misma forma que la carpeta de medios de Ludolog; asi una segunda pasada ya no baja lo que ya
  * tiene. Al acabar se manda a la consola lo que le falta (o todo, si se pidio de nuevo). Los
  * videos se convierten aqui, con las reglas de esa consola (ver VideoPrep).
+ *
+ * Las pasadas las lanzan AppState.scrape (a un device) y AppState.scrapeCatalog (al catalogo del
+ * PC); las busquedas de un solo juego, ArtPicker. Los imitadores de lo que el scraper pide de
+ * Android estan en LudologScrapeShims.kt y en pc/src/main/java/android.
  */
 enum class ScrapeMode(val label: String) {
     MISSING("missing art & video"),
@@ -72,6 +79,8 @@ internal object PcScraper {
     /**
      * Lo que el scraper lee de la consola (sus fichas, su catalogo corregido) sale de su copia en
      * el PC. Es de una consola a la vez: se apunta a esta y se olvida lo de la anterior.
+     * Al acabar no se vuelve atras: DataHome.dir sigue en la copia de este device (y Dossiers lee
+     * sus fichas, tambien para Names.display) hasta que AppState.select o readCompanion la cambian.
      */
     @Synchronized
     fun point(e: ConsoleEntry) {
@@ -84,7 +93,7 @@ internal object PcScraper {
         val scraper = ArtScraper(
             catalog = CompanionReader.catalog(),
             prefs = prefs,
-            sources = listOf(LibretroSource(LibretroThumbnails(cacheDir = cache)), GameTdbSource(), SteamSource()),
+            sources = listOf(LibretroSource(LibretroThumbnails(cacheDir = cache)), GameTdbSource(), SteamSource(), IgdbSource()),
             mediaRoot = stash(e.id),
             snaps = VideoSnaps(cacheDir = cache, clipSeconds = prefs.clipSeconds, keepAudio = prefs.anyThemeHearsVideo,
                 maxHeight = prefs.videoHeight),

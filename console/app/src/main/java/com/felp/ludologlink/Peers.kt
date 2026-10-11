@@ -24,6 +24,11 @@ import java.security.SecureRandom
  * El emparejamiento es el mismo que con el PC (codigo en la notificacion de la otra consola),
  * pero en los dos sentidos de una vez: al confirmar, esta le da a la otra un token suyo, para que
  * la otra tambien pueda llamarla cuando sea ella la que juegue. Ver CompanionShare.
+ *
+ * Hoy se cruzan mas cosas que el Companion: partidas (SaveSync), ROMs (RomTransfer), correcciones
+ * (MetaEdits) y claves de arte (ArtKeys). Se guardan en las preferencias "link" (clave `peers`).
+ * [Peers.open] y [Peers.json] son el cliente HTTP de todo lo que esta consola le pide a otra, y
+ * [Peers.reach] no da por buena una direccion nueva sin la prueba de /ping (ver HttpServer.pingProof).
  */
 data class Peer(
     val id: String,

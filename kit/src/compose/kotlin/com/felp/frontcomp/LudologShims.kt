@@ -16,17 +16,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 
 /*
- * Lo que Ornaments.kt y Pixel.kt de Ludolog piden de otros archivos de Ludolog que el PC NO
- * compila, porque esos tocan Android (Theme.kt, MainActivity.kt, Motion.kt). Aqui va la
- * version de escritorio, con el mismo nombre y en el mismo paquete, para que esos dos archivos
- * compilen tal cual. Si Ornaments.kt empieza a usar otro simbolo de Ludolog, falla la
- * compilacion del PC: se añade aqui. Ver ludolog-front-end/docs/ludolog-link.md.
+ * Lo que Ornaments.kt y Pixel.kt de Ludolog piden de otros archivos de Ludolog que ni la app de la
+ * consola ni la del PC compilan (Theme.kt, Modal.kt, MainActivity.kt, Motion.kt; en el PC, ademas, tocan
+ * Android). Aqui va una version propia, con el mismo nombre y en el mismo paquete, para que esos
+ * archivos compilen tal cual. Esta en el kit: lo compilan las dos apps (ver los build.gradle.kts de
+ * console/app y de pc), y la de la consola usa tambien MenuInk y MenuDim en sus pantallas. Si
+ * Ornaments.kt empieza a usar otro simbolo de Ludolog, fallan las dos compilaciones: se añade aqui.
+ * Ver ludolog-front-end/docs/ludolog-link.md.
  */
 
 /** El tema puesto. En Ludolog vive en Theme.kt, junto a AppTheme. */
 val LocalTheme = compositionLocalOf { GalleryTheme }
 
-/** Si la fila esta invertida (seleccion INVERT). En Ludolog, LocalRowInverted de MainActivity. */
+/** Si la fila esta invertida (seleccion INVERT). En Ludolog, LocalRowInverted de Modal.kt. */
 val LocalRowInverted = staticCompositionLocalOf { false }
 
 private val inverted: Boolean @Composable get() = LocalRowInverted.current
@@ -46,8 +48,8 @@ internal val MenuBody: FontFamily @Composable get() = LocalTheme.current.body
 internal val MenuDisplay: FontFamily @Composable get() = LocalTheme.current.display
 
 /**
- * Lo que late, de [low] a 1 y vuelta, con la misma curva coseno que Motion.kt. En el PC no hay
- * reposo de pantalla que respetar, asi que late siempre.
+ * Lo que late, de [low] a 1 y vuelta, con la misma curva coseno que Motion.kt. Late siempre: en el
+ * PC no hay reposo de pantalla que respetar, y en la consola esta version tampoco lo mira.
  */
 @Composable
 internal fun rememberPulse(low: Float, periodMs: Int = 1900): State<Float> {

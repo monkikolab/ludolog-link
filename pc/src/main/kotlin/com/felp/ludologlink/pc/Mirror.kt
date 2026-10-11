@@ -14,7 +14,11 @@ import java.io.File
  * cuadernos se comparan por fecha, porque su copia coherente no mide lo mismo que el original.
  */
 object Mirror {
-    /** `<datos del PC>/consoles/<id>/Ludolog`. */
+    /**
+     * `Config.backupRoot/<id>/Ludolog` (ver Config.consoleDir): por defecto
+     * `<carpeta de datos>/backups/<id>/Ludolog`; en un PC con respaldos de antes, en Documentos
+     * (ver Config.keepOldBackups).
+     */
     fun dir(consoleId: String) = File(Config.consoleDir(consoleId), "Ludolog")
 
     data class Result(val copied: Int, val bytes: Long, val removed: Int, val total: Int)

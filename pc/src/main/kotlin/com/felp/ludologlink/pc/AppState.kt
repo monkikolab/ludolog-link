@@ -18,6 +18,29 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+// AppState.kt: el estado y las acciones de toda la app. Main.kt crea un solo AppState; las vistas
+// leen su estado (mutableStateOf) y llaman a sus funciones, y no hablan con la red por su cuenta.
+// Cada accion lanza una corrutina en [scope], hace red y disco en Dispatchers.IO (Link, Client.kt)
+// y avisa con notify(), que con `kind` lo apunta tambien en el registro (PcLog). Mapa del archivo:
+//   ConsoleEntry   un device: lo emparejado (Config), lo leido de el y lo que tiene en marcha.
+//   AppState
+//     arriba       seleccion, pestaña global, tema y letras (theme, fetchFonts), notify, loadLog.
+//     busqueda     search (Discovery, y la prueba de identidad si cambio de IP), refreshCompanion,
+//                  loadArt, ajustes de Ludolog (stage, syncConfig), saveGameInfo, saveConsoleInfo,
+//                  catalogo del PC a mano (fileToCatalog, removeFromCatalog, deleteFromCatalog),
+//                  renameBoth, backup, restore, importArt, importVideo, removeMedia, copyTo, copyMedia.
+//     arte entre consolas y huerfanos   copyArtNow, copyArt, mediaEverywhere.
+//     save manager     fetchSaveBackups, restoreSave.
+//     catalogo del PC  romToCatalog, romFromCatalog, mediaToCatalog, toCatalog, findOrphans,
+//                      deleteMedia, syncCompanions, scrape, cancelScrape.
+//     llenar lo que falta   FillPlan, planFill, fill, scrapeCatalog, deleteEverywhere.
+//     datos        readCompanion, select, load, refreshFiles, failed (un 401 olvida el emparejado).
+//     emparejado   claimOnce, syncKeys y setArtKeys (claves de IGDB), startPairing,
+//                  confirmPairing, replaceOld, forget.
+//     operaciones  rename, delete, download; windowsName e inside, para nombres que vienen de fuera.
+//   Transfer, Transfers   la cola de subidas, descargas y copias entre devices: de una en una, con
+//                  reintentos cada vez mas espaciados tras un corte (hasta GIVE_UP_MS).
+
 /** Una consola en la lista: emparejada (recordada) o recien encontrada en la red. */
 class ConsoleEntry(val id: String) {
     var name by mutableStateOf("")
@@ -35,7 +58,10 @@ class ConsoleEntry(val id: String) {
     var roms by mutableStateOf<List<RomFile>>(emptyList())
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
-    /** La pestaña que se esta viendo de esta consola: overview, roms, companion o settings. */
+    /**
+     * La pestaña que se esta viendo de esta consola: overview, saves, companion, settings o log.
+     * Games y Consoles son de todos los devices: van en AppState.globalTab.
+     */
     var tab by mutableStateOf("overview")
 
     /** El Companion de esta consola, leido de su copia en el PC. Nulo mientras no se ha leido. */
@@ -131,6 +157,9 @@ class AppState(private val scope: CoroutineScope) {
     /** Consola a la que se le ha pedido un codigo: abre el dialogo de emparejar. */
     var pairing by mutableStateOf<ConsoleEntry?>(null)
     val transfers = Transfers(this, scope)
+
+    /** Buscar y elegir la caratula o el video de un juego, como en Ludolog (ver ArtPick.kt). */
+    internal val picker = ArtPicker(this, scope)
 
     /** "console" o el id de un tema fijado a mano. Ver [theme]. */
     var look by mutableStateOf(Config.look)
@@ -418,14 +447,64 @@ class AppState(private val scope: CoroutineScope) {
             folder.mkdirs()
             folder.listFiles().orEmpty().filter { it.isFile && it.nameWithoutExtension.equals(stem, true) }.forEach { it.delete() }
             file.copyTo(java.io.File(folder, "$stem.${file.extension.lowercase()}"), overwrite = true)
+            PcCatalog.forget()
         }.onSuccess { notify("Saved in the PC catalog.", kind = "art") }
             .onFailure { notify("Couldn't save it in the PC catalog: ${it.message}", error = true, kind = "art") }
+    }
+
+    /**
+     * El Explorador de Windows en la carpeta de [file], con el archivo marcado: lo del catalogo del
+     * PC puede estar en otro disco o en otra carpeta que la del programa, y no habia forma de verlo.
+     */
+    fun showInFolder(file: java.io.File) {
+        if (!file.exists()) return notify("${file.name} isn't there anymore.", error = true)
+        runCatching {
+            val desktop = java.awt.Desktop.getDesktop()
+            if (desktop.isSupported(java.awt.Desktop.Action.BROWSE_FILE_DIR)) desktop.browseFileDirectory(file)
+            else ProcessBuilder("explorer.exe", "/select,", file.absolutePath).start()
+        }.onFailure { notify("Couldn't open the folder: ${it.message}", error = true) }
     }
 
     /** Una caratula o un video del catalogo del PC, fuera. */
     fun removeFromCatalog(file: java.io.File) {
         val ok = runCatching { file.delete() }.getOrDefault(false)
+        PcCatalog.forget()
         notify(if (ok) "Removed ${file.name} from the PC catalog." else "Couldn't remove ${file.name}.", error = !ok, kind = "art")
+    }
+
+    /**
+     * ROMs del catalogo del PC, a la Papelera de reciclaje: cada uno con su .sbi, y su subcarpeta (la
+     * de un multidisco) si se queda vacia; la de la consola nunca. Su arte se queda: sin ROM en ningun
+     * sitio, la fila sale de la tabla (ver catalogRows). Sin Papelera no se borra: borrar para siempre
+     * en este PC no lo hace Link.
+     */
+    fun deleteFromCatalog(scan: PcCatalog.Scan, all: List<RomFile>, done: () -> Unit = {}) {
+        val desktop = runCatching { java.awt.Desktop.getDesktop().takeIf { it.isSupported(java.awt.Desktop.Action.MOVE_TO_TRASH) } }.getOrNull()
+            ?: return notify("This PC has no Recycle Bin that Link can use. Delete them in Explorer.", error = true, kind = "roms")
+        scope.launch {
+            val (ok, failed) = withContext(Dispatchers.IO) {
+                var ok = 0
+                val failed = mutableListOf<String>()
+                for (f in all.filterNot(Shortcuts::isLocked)) {
+                    val file = runCatching { inside(scan.dir, PcCatalog.file(scan, f)) }.getOrNull()
+                    if (file == null || !file.isFile) { failed += f.name; continue }
+                    if (!runCatching { desktop.moveToTrash(file) }.getOrDefault(false)) { failed += f.name; continue }
+                    ok++
+                    // Un .sbi sin su juego no sirve de nada: se va con el, como en los devices.
+                    if (!file.extension.equals("sbi", true)) file.parentFile?.listFiles().orEmpty()
+                        .filter { it.isFile && it.extension.equals("sbi", true) && it.nameWithoutExtension.equals(file.nameWithoutExtension, true) }
+                        .forEach { runCatching { desktop.moveToTrash(it) } }
+                    val parent = file.parentFile
+                    val system = java.io.File(scan.dir, f.system)
+                    if (parent != null && parent.canonicalPath != system.canonicalPath && parent.listFiles().isNullOrEmpty()) parent.delete()
+                }
+                ok to failed
+            }
+            PcCatalog.forget()
+            if (failed.isEmpty()) notify(if (ok == 1) "Moved to the Recycle Bin." else "Moved $ok files to the Recycle Bin.", kind = "roms")
+            else notify("Moved $ok to the Recycle Bin; ${failed.size} couldn't: ${failed.first()}", error = true, kind = "roms")
+            done()
+        }
     }
 
     /** Lo corregido en [src] de ese juego, para el catalogo del PC. */
@@ -734,9 +813,30 @@ class AppState(private val scope: CoroutineScope) {
         return e.link().mediaList().also { mediaLists[e.id] = now to it }
     }
 
+    /** Lo de [copyArt], sin avisos: cuantos archivos copio. Bloquea (en Dispatchers.IO). */
+    internal fun copyArtNow(src: ConsoleEntry, fs: RomFile, dst: ConsoleEntry, fd: RomFile, video: Boolean): Int {
+        val keys = Library.artKeys(src, fs)
+        val found = mediaOf(src).filter { Library.mediaKey(it) in keys && it.kind.equals("videos", true) == video }
+        val pick = if (video) listOfNotNull(found.firstOrNull { it.name.endsWith(".mp4", true) })
+            else found.groupBy { it.kind.ifEmpty { "covers" }.lowercase() }.map { it.value.first() }
+        val sys = (Names.game(dst, fd)?.systemId ?: fd.system).lowercase()
+        val stem = com.felp.ludolog.kit.Protocol.stemOf(fd.name.substringAfterLast('/'))
+        for (m in pick) {
+            val kind = if (video) "videos" else m.kind.ifEmpty { "covers" }
+            val ext = m.name.substringAfterLast('.').lowercase()
+            val tmp = java.io.File.createTempFile("ludolog-link-art", ".$ext")
+            try {
+                if (src.link().mediaFile(m.path, tmp)) dst.link().putMedia("media/$sys/$kind/$stem.$ext", tmp.readBytes())
+            } finally {
+                tmp.delete()
+            }
+        }
+        return pick.size
+    }
+
     /**
      * El arte (o el video) que [fs] tiene en [src], para [fd] en [dst], que no lo tiene: el mismo
-     * juego en las dos (ver Library.diff). Se busca donde lo ve Ludolog en [src] (suyo o de ES-DE) y
+     * juego en las dos (ver Library.gameKey). Se busca donde lo ve Ludolog en [src] (suyo o de ES-DE) y
      * va a la carpeta de medios de Ludolog en [dst], con el nombre del ROM de alla. El arte, un
      * archivo por tipo (caratula, captura...); el video, el primero en .mp4, que es lo que acepta.
      */
@@ -745,25 +845,7 @@ class AppState(private val scope: CoroutineScope) {
         val name = Names.display(dst, fd)
         scope.launch {
             try {
-                val n = withContext(Dispatchers.IO) {
-                    val keys = Library.artKeys(src, fs)
-                    val found = mediaOf(src).filter { Library.mediaKey(it) in keys && it.kind.equals("videos", true) == video }
-                    val pick = if (video) listOfNotNull(found.firstOrNull { it.name.endsWith(".mp4", true) })
-                        else found.groupBy { it.kind.ifEmpty { "covers" }.lowercase() }.map { it.value.first() }
-                    val sys = (Names.game(dst, fd)?.systemId ?: fd.system).lowercase()
-                    val stem = com.felp.ludolog.kit.Protocol.stemOf(fd.name.substringAfterLast('/'))
-                    for (m in pick) {
-                        val kind = if (video) "videos" else m.kind.ifEmpty { "covers" }
-                        val ext = m.name.substringAfterLast('.').lowercase()
-                        val tmp = java.io.File.createTempFile("ludolog-link-art", ".$ext")
-                        try {
-                            if (src.link().mediaFile(m.path, tmp)) dst.link().putMedia("media/$sys/$kind/$stem.$ext", tmp.readBytes())
-                        } finally {
-                            tmp.delete()
-                        }
-                    }
-                    pick.size
-                }
+                val n = withContext(Dispatchers.IO) { copyArtNow(src, fs, dst, fd, video) }
                 mediaLists.remove(dst.id)
                 loadArt(dst)
                 notify(if (n > 0) "Copied the $what of $name from ${src.name} to ${dst.name}."
@@ -824,6 +906,7 @@ class AppState(private val scope: CoroutineScope) {
                                     folder.listFiles().orEmpty().filter { it.isFile && it.nameWithoutExtension.equals(stem, true) }.forEach { it.delete() }
                                     file.copyTo(java.io.File(folder, "$stem.${file.extension.lowercase()}"), overwrite = true)
                                 }
+                                PcCatalog.forget()
                             } else {
                                 val d = dev(id)!!
                                 val sys = (Names.game(d, f)?.systemId ?: f.system).lowercase()
@@ -956,6 +1039,7 @@ class AppState(private val scope: CoroutineScope) {
         val tmp = java.io.File(out.path + ".dl")
         if (!src.link().mediaFile(m.path, tmp)) return false
         java.nio.file.Files.move(tmp.toPath(), out.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        PcCatalog.forget()
         return true
     }
 
@@ -1144,54 +1228,200 @@ class AppState(private val scope: CoroutineScope) {
 
     fun cancelScrape(e: ConsoleEntry) { e.scrapeState?.job?.cancel() }
 
+    // ------------------------------------------------------------- llenar lo que falta
+
+    /** Un ROM que «Fill missing» copia: de que sitio ([CatalogRow.PC] o un device) a cual. */
+    class FillRom(val from: String, val to: String, val row: CatalogRow, val rom: RomFile)
+    /** Una caratula o un video que copia de un sitio que lo tiene a otro que no. */
+    class FillMedia(val from: String, val to: String, val row: CatalogRow, val video: Boolean)
+
+    /** Lo que haria «Fill missing»: se calcula antes, para decirlo y preguntar. */
+    class FillPlan(val roms: List<FillRom>, val media: List<FillMedia>, val scrape: Map<String, List<RomFile>>) {
+        val bytes get() = roms.sumOf { it.rom.size }
+        val empty get() = roms.isEmpty() && media.isEmpty() && scrape.isEmpty()
+    }
+
     /**
-     * La caratula (o el video) de un juego, buscada en internet para el catalogo del PC. El scraper
-     * de Ludolog necesita lo de un device (sus fichas, su catalogo): el que tiene el juego, o el
-     * primero con Ludolog. Lo bajado se queda en el PC, en `media/` del catalogo, y no va a ningun device.
+     * Que le falta a cada sitio de [rows] y de donde sale (pedido del usuario, 10-10-2026): el ROM, de
+     * un sitio que lo tenga (a un device, del catalogo del PC si esta, que es local); la caratula y el
+     * video, de otro sitio que los tenga y, si no los tiene ninguno, del scraper. Steam y DoomForge no
+     * se copian: solo su arte donde ya estan. El arte de un ROM que se copia a un device va con el (ver
+     * romFromCatalog y copyMedia); al catalogo no, y se copia aparte.
      */
-    fun scrapeToCatalog(r: CatalogRow, devices: List<ConsoleEntry>, scan: PcCatalog.Scan, video: Boolean, done: () -> Unit = {}) {
-        val root = PcCatalog.dir ?: return catalogMissing()
-        val ready = devices.filter { it.info?.ludolog != null && it.scrapeState == null }
-        val ctx = ready.firstOrNull { r.cells[it.id]?.rom != null } ?: ready.firstOrNull()
-            ?: return notify("Connect a device with Ludolog to scrape.", error = true)
-        val pcRom = r.cells[CatalogRow.PC]?.rom
-        val devRom = r.cells[ctx.id]?.rom
-        val game = devRom?.let { Names.game(ctx, it) } ?: pcRom?.let { PcCatalog.game(scan, it) }
-            ?: devices.firstNotNullOfOrNull { d -> r.cells[d.id]?.rom?.let { Names.game(d, it) } }
-            ?: return notify("Couldn't tell which game this is.", error = true, kind = "art")
-        val named = pcRom ?: devRom ?: devices.firstNotNullOfOrNull { r.cells[it.id]?.rom } ?: return
-        val stem = windowsName(com.felp.ludolog.kit.Protocol.stemOf(named.name.substringAfterLast('/')))
-        val sys = windowsName(game.systemId.lowercase())
-        val mode = if (video) ScrapeMode.VIDEOS else ScrapeMode.COVERS
-        val state = ScrapeState(mode, 1)
-        ctx.scrapeState = state
-        state.job = scope.launch {
-            try {
-                val found = withContext(Dispatchers.IO) {
-                    PcScraper.point(ctx)
-                    val (scraper, _) = PcScraper.scraper(ctx, mode)
-                    // Solo lo que se pide: lo otro cuenta como puesto.
-                    scraper.run(listOf(game), com.felp.frontcomp.ArtIndex({ video }, { !video })) { p -> state.progress = p }
-                    val got = (if (video) scraper.videoFor(game) else scraper.destinationFor(game)).takeIf { it.isFile && it.length() > 0 }
-                        ?: return@withContext false
-                    val folder = java.io.File(root, "${PcCatalog.MEDIA}/$sys/${if (video) "videos" else "covers"}")
-                    folder.mkdirs()
-                    folder.listFiles().orEmpty().filter { it.isFile && it.nameWithoutExtension.equals(stem, true) }.forEach { it.delete() }
-                    got.copyTo(java.io.File(folder, "$stem.${got.extension.lowercase()}"), overwrite = true)
-                    true
+    fun planFill(rows: List<CatalogRow>, devices: List<ConsoleEntry>, scan: PcCatalog.Scan?): FillPlan {
+        val pc = CatalogRow.PC
+        fun dev(id: String) = devices.firstOrNull { it.id == id }
+        val places = (if (scan != null) listOf(pc) else emptyList()) + devices.map { it.id }
+        fun has(c: CatalogCell?, video: Boolean) = if (video) c?.video == true else c?.art == true
+        val roms = ArrayList<FillRom>()
+        val media = ArrayList<FillMedia>()
+        val scrape = LinkedHashMap<String, MutableList<RomFile>>()
+        for (r in rows) {
+            val with = r.cells.filter { (id, c) -> c.rom != null && (id == pc || dev(id) != null) }.keys
+            if (with.isEmpty()) continue
+            for (p in places) {
+                val c = r.cells[p]
+                if (c?.rom == null) {
+                    if (r.locked) continue
+                    // A un device, del catalogo si lo tiene (es local); si no, de otro device. Al catalogo, de un device.
+                    val src = (if (p != pc && pc in with) pc else null) ?: with.firstOrNull { it != pc } ?: continue
+                    roms += FillRom(src, p, r, r.cells.getValue(src).rom!!)
+                    if (p == pc) for (video in listOf(false, true)) if (!has(c, video))
+                        with.firstOrNull { it != pc && has(r.cells[it], video) }?.let { media += FillMedia(it, pc, r, video) }
+                    continue
                 }
-                val what = if (video) "video" else "cover"
-                notify(if (found) "Found a $what for ${r.title}: saved in the PC catalog." else "No $what found for ${r.title}.",
-                    error = !found, kind = "art")
+                // El arte de un device va a la carpeta de su Ludolog: sin Ludolog, nada.
+                if (p != pc && dev(p)?.info?.ludolog == null) continue
+                var search = false
+                for (video in listOf(false, true)) {
+                    if (has(c, video)) continue
+                    val src = r.cells.keys.firstOrNull { it != p && has(r.cells[it], video) && (it == pc || dev(it) != null) }
+                    if (src != null) media += FillMedia(src, p, r, video) else search = true
+                }
+                if (search && !(p == pc && r.locked)) scrape.getOrPut(p) { mutableListOf() } += c.rom
+            }
+        }
+        return FillPlan(roms, media, scrape)
+    }
+
+    /** Hace [plan]: los ROMs por la cola; las caratulas y videos, de uno en uno; y el scraper, sitio por sitio. */
+    fun fill(plan: FillPlan, devices: List<ConsoleEntry>, scan: PcCatalog.Scan?, done: () -> Unit = {}) {
+        val pc = CatalogRow.PC
+        fun dev(id: String) = devices.firstOrNull { it.id == id }
+        for ((pair, list) in plan.roms.groupBy { it.from to it.to }) {
+            val (from, to) = pair
+            when {
+                to == pc -> dev(from)?.let { d -> list.forEach { romToCatalog(d, it.rom) } }
+                from == pc && scan != null -> dev(to)?.let { d ->
+                    list.forEach { f -> romFromCatalog(scan, f.rom, d, f.row.cells[pc]?.artFile, f.row.cells[pc]?.videoFile) }
+                }
+                else -> { val s = dev(from); val d = dev(to); if (s != null && d != null) copyTo(s, d, list.map { it.rom }) }
+            }
+        }
+        scope.launch {
+            var copied = 0
+            var failed = 0
+            val touched = HashSet<String>()
+            for (m in plan.media) {
+                val ok = runCatching {
+                    withContext(Dispatchers.IO) {
+                        val to = m.row.cells[m.to]?.rom
+                        when {
+                            // Al catalogo: con el nombre de su ROM alli (o el del device, si aun no esta).
+                            m.to == pc -> {
+                                val s = dev(m.from) ?: return@withContext false
+                                val fs = m.row.cells[m.from]?.rom ?: return@withContext false
+                                val stem = windowsName(Protocol.stemOf((to ?: fs).name.substringAfterLast('/')))
+                                mediaToCatalogNow(s, fs, m.video, stem)
+                            }
+                            // Del catalogo a un device: la caratula en PNG; el video, convertido a lo que pide alla.
+                            m.from == pc -> {
+                                val d = dev(m.to) ?: return@withContext false
+                                val fd = to ?: return@withContext false
+                                val file = (if (m.video) m.row.cells[pc]?.videoFile else m.row.cells[pc]?.artFile) ?: return@withContext false
+                                val sys = Names.game(d, fd)?.systemId ?: fd.system
+                                val stem = Protocol.stemOf(fd.name)
+                                if (m.video) {
+                                    val out = java.io.File.createTempFile("ludolog-link-video", ".mp4")
+                                    try {
+                                        VideoPrep.convert(file, out, VideoPrep.rules(d.ludologConfig))
+                                        d.link().putMedia("media/$sys/videos/$stem.mp4", out.readBytes())
+                                    } finally { out.delete() }
+                                } else {
+                                    val img = javax.imageio.ImageIO.read(file) ?: return@withContext false
+                                    val png = java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "png", it) }.toByteArray()
+                                    d.link().putMedia("media/$sys/covers/$stem.png", png)
+                                }
+                                touched += d.id
+                                true
+                            }
+                            else -> {
+                                val s = dev(m.from); val d = dev(m.to); val fs = m.row.cells[m.from]?.rom
+                                if (s == null || d == null || fs == null || to == null) false
+                                else (copyArtNow(s, fs, d, to, m.video) > 0).also { if (it) touched += d.id }
+                            }
+                        }
+                    }
+                }.getOrDefault(false)
+                if (ok) copied++ else failed++
+            }
+            for (id in touched) dev(id)?.let { mediaLists.remove(it.id); loadArt(it) }
+            if (plan.media.isNotEmpty()) PcCatalog.forget()
+            val queued = plan.roms.size
+            notify(buildString {
+                append("Fill missing: ")
+                append(listOfNotNull(
+                    if (queued > 0) "$queued ${if (queued == 1) "game" else "games"} queued" else null,
+                    if (copied > 0) "$copied covers and videos copied" else null,
+                    if (plan.scrape.isNotEmpty()) "searching online for the rest" else null,
+                ).joinToString(", ").ifEmpty { "nothing to do" })
+                if (failed > 0) append(" · $failed couldn't be copied")
+            }, error = failed > 0, kind = "art")
+            done()
+            // El scraper, de un sitio cada vez: el del PC apunta a las fichas de un device mientras trabaja.
+            for ((id, list) in plan.scrape) {
+                val job = if (id == pc) scan?.let { scrapeCatalog(list, devices, it) }
+                    else dev(id)?.let { d -> scrape(d, list, ScrapeMode.MISSING); d.scrapeState?.job }
+                job?.join()
+            }
+        }
+    }
+
+    /**
+     * El scraper de una tanda de juegos del catalogo del PC (antes solo de uno, con «Fetch box art»):
+     * con las fichas y las reglas de video de un device con Ludolog, y lo encontrado a `media/` del
+     * catalogo con el nombre de cada ROM. Lo que el catalogo ya tiene no se busca.
+     */
+    fun scrapeCatalog(roms: List<RomFile>, devices: List<ConsoleEntry>, scan: PcCatalog.Scan, done: () -> Unit = {}): Job? {
+        val root = PcCatalog.dir ?: run { catalogMissing(); return null }
+        val ctx = devices.firstOrNull { it.info?.ludolog != null && it.scrapeState == null }
+            ?: run { notify("Connect a device with Ludolog to search for the PC catalog.", error = true); return null }
+        val games = roms.filterNot(Shortcuts::isLocked).mapNotNull { f -> PcCatalog.game(scan, f)?.let { f to it } }
+        if (games.isEmpty()) { notify("Nothing to search: no games among those files.", error = true); return null }
+        val state = ScrapeState(ScrapeMode.MISSING, games.size)
+        ctx.scrapeState = state
+        fun inCatalog(f: RomFile, video: Boolean) = PcCatalog.artKeys(scan, f).any { (if (video) scan.videos else scan.covers)[it] != null }
+        val job = scope.launch {
+            try {
+                val (report, saved) = withContext(Dispatchers.IO) {
+                    PcScraper.point(ctx)
+                    val (scraper, _) = PcScraper.scraper(ctx, ScrapeMode.MISSING)
+                    val byPath = games.associate { (f, g) -> g.path to f }
+                    val report = scraper.run(games.map { it.second },
+                        com.felp.frontcomp.ArtIndex({ g -> byPath[g.path]?.let { inCatalog(it, false) } == true },
+                            { g -> byPath[g.path]?.let { inCatalog(it, true) } == true })) { p -> state.progress = p }
+                    var saved = 0
+                    for ((f, g) in games) for (video in listOf(false, true)) {
+                        if (inCatalog(f, video)) continue
+                        val got = (if (video) scraper.videoFor(g) else scraper.destinationFor(g)).takeIf { it.isFile && it.length() > 0 } ?: continue
+                        val stem = windowsName(Protocol.stemOf(f.name.substringAfterLast('/')))
+                        val folder = inside(root, java.io.File(root, "${PcCatalog.MEDIA}/${windowsName(g.systemId.lowercase())}/${if (video) "videos" else "covers"}"))
+                        folder.mkdirs()
+                        folder.listFiles().orEmpty().filter { it.isFile && it.nameWithoutExtension.equals(stem, true) }.forEach { it.delete() }
+                        got.copyTo(java.io.File(folder, "$stem.${got.extension.lowercase()}"), overwrite = true)
+                        saved++
+                    }
+                    PcCatalog.forget()
+                    report to saved
+                }
+                notify("Search for the PC catalog: ${report.summary()} · saved $saved", kind = "art")
             } catch (x: kotlinx.coroutines.CancellationException) {
-                notify("Scrape cancelled.", kind = "art")
+                notify("Search cancelled. Results kept for next time.", kind = "art")
             } catch (x: Exception) {
-                notify("The scrape stopped: ${x.message ?: x.javaClass.simpleName}", error = true, kind = "art")
+                notify("The search stopped: ${x.message ?: x.javaClass.simpleName}", error = true, kind = "art")
             } finally {
                 ctx.scrapeState = null
                 done()
             }
         }
+        state.job = job
+        return job
+    }
+
+    /** Borrar de todos los sitios a la vez: de cada device (para siempre) y del catalogo (a la Papelera). */
+    fun deleteEverywhere(byDevice: Map<ConsoleEntry, List<RomFile>>, pcFiles: List<RomFile>, scan: PcCatalog.Scan?, done: () -> Unit = {}) {
+        for ((d, files) in byDevice) if (files.isNotEmpty()) delete(d, files)
+        if (pcFiles.isNotEmpty() && scan != null) deleteFromCatalog(scan, pcFiles, done) else done()
     }
 
     private val reading = kotlinx.coroutines.sync.Mutex()
@@ -1244,7 +1474,7 @@ class AppState(private val scope: CoroutineScope) {
                 e.online = true
                 claimOnce(e)
                 info.ludolog?.theme?.let { fetchFonts(e, it) }
-                if (info.ludolog != null) { refreshCompanion(e); loadArt(e, changed = false) }
+                if (info.ludolog != null) { refreshCompanion(e); loadArt(e, changed = false); syncKeys(e) }
                 if (info.name.isNotBlank() && info.name != e.name) {
                     e.name = info.name
                     Config.remember(e.toKnown())
@@ -1338,6 +1568,72 @@ class AppState(private val scope: CoroutineScope) {
                 .onSuccess { n -> if (n > 0) notify("${e.name}: forgot $n older pairing${if (n == 1) "" else "s"} of this PC", about = e, kind = "pairing") }
                 .onFailure { claimed.remove(e.id) }
         }
+    }
+
+    /** Las consolas con las que se estan cruzando las claves ahora: una vez cada una a la vez. */
+    private val keysBusy = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /**
+     * Las claves de las fuentes de arte (IGDB) con [e]: se trae lo suyo si es mas nuevo y se le da lo
+     * del PC si lo es (ver PcKeys y KeyBox). Al cargarla, que es tambien al emparejar. Lo que llega
+     * de una consola sigue a las demas conectadas: el PC hace de puente entre consolas que no estan
+     * emparejadas entre si. Una consola con Link o Ludolog anteriores no sabe (404): nada.
+     */
+    fun syncKeys(e: ConsoleEntry) {
+        val token = e.token ?: return
+        if (e.info?.ludolog == null || !keysBusy.add(e.id)) return
+        scope.launch {
+            try {
+                // Si el PC tenia algo de IGDB: si no, que llegue «apagado» de una consola no es noticia.
+                val had = PcKeys.IGDB.any { PcKeys.value(it.first).isNotEmpty() }
+                val (took, gave) = withContext(Dispatchers.IO) {
+                    val me = com.felp.ludolog.kit.KeyBox.pair()
+                    val l = e.link()
+                    val j = l.keys(com.felp.ludolog.kit.KeyBox.pub(me))
+                    val theirPub = com.felp.ludolog.kit.KeyBox.parse(j.optString("pub"))
+                    val theirs = theirPub?.let { pub ->
+                        j.optString("box").takeIf { it.isNotEmpty() }?.let { com.felp.ludolog.kit.KeyBox.open(me, pub, token, it) }
+                    }.orEmpty()
+                    val took = PcKeys.merge(theirs, e.name)
+                    val give = com.felp.ludolog.kit.KeyBox.ahead(PcKeys.all(), com.felp.ludolog.kit.KeyBox.stampsOf(j.optJSONObject("stamps")))
+                    val gave = if (give.isNotEmpty() && theirPub != null) l.putKeys(org.json.JSONObject()
+                        .put("pub", com.felp.ludolog.kit.KeyBox.pub(me)).put("to", j.optString("pub"))
+                        .put("box", com.felp.ludolog.kit.KeyBox.seal(me, theirPub, token, give))) else 0
+                    took to gave
+                }
+                if (took.isNotEmpty()) {
+                    if (had || PcKeys.IGDB.any { PcKeys.value(it.first).isNotEmpty() }) notify(when {
+                        PcKeys.ready() -> "IGDB keys from ${e.name}: the PC's scraper uses them too."
+                        PcKeys.IGDB.all { PcKeys.value(it.first).isEmpty() } -> "IGDB was turned off on ${e.name}."
+                        else -> "Part of the IGDB keys came from ${e.name}; IGDB needs both."
+                    }, about = e, kind = "art")
+                    // A las demas, por si no estan emparejadas con esa.
+                    keyTargets().filter { it !== e }.forEach(::syncKeys)
+                }
+                if (gave > 0) PcLog.add(e.id, "art", "Sent the art source keys to ${e.name}")
+            } catch (x: LinkError) {
+                // 404: Link o Ludolog anteriores en esa consola. Lo demas lo dira la siguiente carga.
+            } finally {
+                keysBusy.remove(e.id)
+            }
+        }
+    }
+
+    /** Las consolas a las que se les pueden pasar las claves ahora: emparejadas, a la vista y con Ludolog. */
+    private fun keyTargets() = consoles.filter { it.paired && it.online == true && it.info?.ludolog != null }
+
+    /** Claves escritas en Settings del PC: se guardan y van a todas las consolas conectadas. */
+    fun setArtKeys(values: Map<String, String>) {
+        if (!runCatching { PcKeys.set(values) }.getOrElse {
+                notify("Couldn't save the keys: ${it.message}", error = true, kind = "art"); return
+            }) return
+        val to = keyTargets()
+        notify(when {
+            !PcKeys.ready() -> "IGDB turned off. It goes off on your devices too."
+            to.isEmpty() -> "IGDB keys saved. They reach your devices when they connect."
+            else -> "IGDB keys saved. Sending them to ${to.joinToString { it.name }}."
+        }, kind = "art")
+        to.forEach(::syncKeys)
     }
 
     fun startPairing(e: ConsoleEntry) {
@@ -1511,7 +1807,7 @@ class AppState(private val scope: CoroutineScope) {
         s.replace(Regex("""[<>:"|?*\\/\x00-\x1f]"""), "_").trimEnd('.', ' ').ifEmpty { "_" }
 
     /** [child] si de verdad queda dentro de [base]; si no, error: su nombre venia de fuera. */
-    private fun inside(base: File, child: File): File {
+    internal fun inside(base: File, child: File): File {
         if (!child.canonicalPath.startsWith(base.canonicalPath + File.separator, ignoreCase = true))
             throw java.io.IOException("unsafe file name: ${child.name}")
         return child

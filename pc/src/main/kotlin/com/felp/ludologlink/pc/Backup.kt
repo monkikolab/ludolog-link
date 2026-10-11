@@ -32,6 +32,15 @@ import java.util.Date
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+// Backup.kt: lo que el PC guarda de cada consola, en Config.consoleDir(<id>) (por defecto
+// <carpeta de datos>/backups/<id>):
+//   Ludolog/                       la copia de su carpeta de datos de Ludolog (Mirror)
+//   snapshots/<fecha>-<tag>.zip    instantaneas de lo esencial (Backups; Restore.kt las devuelve)
+//   saves/<paquete>/               sus respaldos de partidas, y en .app el nombre del emulador
+//                                  (SaveBackups; los lee SaveManager.kt)
+//   console.txt                    nombre y modelo, que escribe AppState.backup
+// Y el dialogo "Back up now…" de Overview (BackupDialog), que llama a AppState.backup.
+
 /**
  * Respaldos de la carpeta de datos de Ludolog de una consola.
  *
@@ -49,8 +58,9 @@ object Backups {
     fun list(consoleId: String): List<File> =
         snapshots(consoleId).listFiles { f -> f.name.endsWith(".zip") }.orEmpty().sortedByDescending { it.name }
 
-    /** Una instantanea fechada de lo esencial de la copia. Devuelve el .zip. */
     /**
+     * Una instantanea fechada de lo esencial de la copia. Devuelve el .zip.
+     *
      * [protect]: una que no sale por la rotacion (la que se esta restaurando). Se escribe como .part y
      * se renombra entera: una a medias (un corte, el disco lleno) no se lista ni cuenta.
      */

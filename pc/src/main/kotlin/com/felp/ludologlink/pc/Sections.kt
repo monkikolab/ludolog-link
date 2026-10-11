@@ -44,6 +44,16 @@ import com.felp.frontcomp.themeById
 import com.felp.ludolog.kit.Format
 import kotlinx.coroutines.launch
 
+// Sections.kt: dos pestañas de un device (las elige ConsoleView por ConsoleEntry.tab).
+//   OverviewView    "Overview": la ficha del device, el resumen de su Companion y la copia de sus
+//                   datos en el PC (Mirror), con respaldar, restaurar y "Sync now".
+//   SettingsView    "Settings", con tres sub-pestañas:
+//     PcSettings       lo de este PC: aspecto, carpetas (Config.dataRoot, backupRoot, downloadDir,
+//                      PcCatalog) y olvidar el device; ArtSourcesPane, las claves de IGDB (PcKeys).
+//     ConsoleSettings  ajustes de Ludolog en el device, que quedan pendientes (AppState.stage)
+//                      hasta "Sync to device"; claves y valores por defecto, los de Prefs.kt.
+//     AboutPane        version, buscar actualizaciones (PcUpdates) y exportar el diagnostico.
+
 /** Una cifra con su rotulo, a lo ancho: el rotulo a la izquierda, el valor a la derecha. */
 @Composable
 private fun Fact(label: String, value: String?) {
@@ -318,7 +328,81 @@ private fun PcSettings(app: AppState, e: ConsoleEntry, window: java.awt.Window) 
                 style = MaterialTheme.typography.bodySmall, color = MenuDim)
             LTextButton(onClick = { app.forget(e) }) { Text("Forget this device", color = Look.danger) }
         }
+        ArtSourcesPane(app, Modifier.weight(1f).fillMaxHeight())
     }
+}
+
+/**
+ * IGDB, como en Ludolog (Settings → Art sources): las mismas dos casillas, que el scraper del PC usa
+ * igual que el de las consolas. Se escriben aqui o en cualquier consola, y Link las pasa a todos los
+ * aparatos emparejados (ver PcKeys y AppState.syncKeys). El secreto no se enseña nunca.
+ */
+@Composable
+private fun ArtSourcesPane(app: AppState, modifier: Modifier) {
+    val rev = PcKeys.revision
+    val savedId = remember(rev) { PcKeys.value("igdb.id") }
+    val hasSecret = remember(rev) { PcKeys.value("igdb.secret").isNotEmpty() }
+    var id by remember(rev) { mutableStateOf(savedId) }
+    var secret by remember(rev) { mutableStateOf("") }
+    var how by remember { mutableStateOf(false) }
+    var confirmOff by remember { mutableStateOf(false) }
+    Pane("Art sources", modifier) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            Text("IGDB", style = MaterialTheme.typography.titleSmall, color = MenuInk)
+            val at = remember(rev) { PcKeys.at() }
+            val `when` = if (at > 1) " · " + java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US).format(java.util.Date(at)) else ""
+            val from = PcKeys.origin?.let { " · from $it" } ?: if (at > 0) " · set on this PC" else ""
+            Text(when {
+                PcKeys.ready() -> "Ready$from$`when`"
+                at > 0 && savedId.isEmpty() && !hasSecret -> "Off$from$`when`"
+                savedId.isNotEmpty() || hasSecret -> "Needs the ${if (savedId.isEmpty()) "Client ID" else "Client secret"}"
+                else -> "Not set up"
+            }, style = MaterialTheme.typography.bodyMedium, color = if (PcKeys.ready()) Look.accent else MenuDim)
+            Spacer(Modifier.height(6.dp))
+            Text("Box art from IGDB, with your own free Twitch keys. The PC's scraper uses it like your devices do. " +
+                "Set the keys once, here or on any device: Ludolog Link passes them to every paired device, encrypted.",
+                style = MaterialTheme.typography.bodySmall, color = MenuDim)
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedTextField(value = id, onValueChange = { id = it }, singleLine = true, shape = Look.shape,
+                label = { Text("Client ID") }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(6.dp))
+            androidx.compose.material3.OutlinedTextField(value = secret, onValueChange = { secret = it }, singleLine = true, shape = Look.shape,
+                label = { Text("Client secret") },
+                placeholder = { Text(if (hasSecret) "Set · type a new one to replace it" else "") },
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                val changed = id.trim() != savedId || secret.isNotBlank()
+                LButton(onClick = {
+                    app.setArtKeys(buildMap {
+                        put("igdb.id", id)
+                        if (secret.isNotBlank()) put("igdb.secret", secret)
+                    })
+                }, enabled = changed && id.isNotBlank() && (hasSecret || secret.isNotBlank())) { Text("Save") }
+                if (savedId.isNotEmpty() || hasSecret) LTextButton(onClick = { confirmOff = true }) {
+                    Text("Turn off everywhere", color = Look.danger)
+                }
+            }
+            LTextButton(onClick = { how = !how }) { Text(if (how) "Hide the steps" else "How to get them") }
+            if (how) for (step in listOf(
+                "1  Sign in at dev.twitch.tv with any Twitch account and enable two-factor.",
+                "2  Go to Your Console, Applications, Register Your Application.",
+                "3  Name it anything, set the redirect to http://localhost, category Application Integration.",
+                "4  It gives you a Client ID; press New Secret for the other one.",
+                "5  Type both here. They are yours: your allowance, and you can revoke them.",
+            )) Text(step, style = MaterialTheme.typography.bodySmall, color = MenuDim, modifier = Modifier.padding(vertical = 2.dp))
+        }
+    }
+    if (confirmOff) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { confirmOff = false },
+        title = { Text("Turn off IGDB everywhere?") },
+        text = { Text("Clears the keys on this PC, and on each paired device when it connects. You can type them again later.") },
+        confirmButton = { LTextButton(onClick = { confirmOff = false; app.setArtKeys(PcKeys.IGDB.associate { it.first to "" }) }) {
+            Text("Turn off", color = Look.danger)
+        } },
+        dismissButton = { LTextButton(onClick = { confirmOff = false }) { Text("Cancel") } },
+    )
 }
 
 /**

@@ -44,7 +44,7 @@ object PeerState {
         plays[k]?.takeIf { System.currentTimeMillis() - it.at < FRESH_MS }?.let { return it.games }
         if (recentlyDown(p.id)) return null
         val r = Peers.reachQuick(ctx, p) ?: run { down[p.id] = System.currentTimeMillis(); return null }
-        return fetch(r, listOf(pkg))[pkg]
+        return fetch(ctx, r, listOf(pkg))[pkg]
     }
 
     /** A todos a la vez: devuelve lo de cada uno (nulo si no contesto). Esperas: la del mas lento. */
@@ -65,17 +65,17 @@ object PeerState {
             for (p in Peers.all(app)) pool.execute {
                 if (recentlyDown(p.id)) return@execute
                 val r = Peers.reachQuick(app, p) ?: run { down[p.id] = System.currentTimeMillis(); return@execute }
-                fetch(r, pkgs)
+                fetch(app, r, pkgs)
             }
         }
     }
 
     /** /saves/state de cada emulador, con espera corta; lo guarda. */
-    private fun fetch(r: Peer, pkgs: List<String>): Map<String, Map<String, Long>> {
+    private fun fetch(ctx: Context, r: Peer, pkgs: List<String>): Map<String, Map<String, Long>> {
         val out = HashMap<String, Map<String, Long>>()
         for (pkg in pkgs) {
             val g = runCatching {
-                Peers.json(Peers.open(r.host, r.port, "GET", "/saves/state", mapOf("pkg" to pkg), r.token, 2_500, connectTimeout = 1_000))
+                Peers.json(Peers.open(r.host, r.port, "GET", "/saves/state", Saves.stateQuery(ctx, pkg), r.token, 2_500, connectTimeout = 1_000))
                     .optJSONObject("games")
             }.getOrElse { down[r.id] = System.currentTimeMillis(); return out }
             val games = g?.keys()?.asSequence()?.associateWith { g.getLong(it) }.orEmpty()

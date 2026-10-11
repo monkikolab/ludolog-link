@@ -35,6 +35,11 @@ import com.felp.ludolog.kit.Format
 import com.felp.ludolog.kit.ui.KitIcons
 import java.awt.Desktop
 
+/**
+ * El panel de transferencias, abajo de la ventana (Main.kt lo pone mientras haya alguna): subidas,
+ * descargas y copias entre devices, con su progreso, cancelar y reintentar. Solo pinta: la cola,
+ * de una en una y con reintentos tras un corte, es Transfers, al final de AppState.kt.
+ */
 @Composable
 fun TransfersPanel(app: AppState) {
     val t = app.transfers

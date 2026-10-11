@@ -4,6 +4,12 @@ import android.content.Context
 import android.os.Build
 import org.json.JSONObject
 
+/**
+ * Los ajustes de Link, en las preferencias privadas "link" de la app (no en la carpeta LudologLink/
+ * de Saves). En el mismo archivo guardan tambien Peers (`peers`) y Saves (el tope de los respaldos).
+ * Los tokens de emparejamiento ([tokens], [tokenOwners]) son la llave de cada PC y consola
+ * emparejados: Diagnostics los tapa al exportar.
+ */
 object Prefs {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("link", Context.MODE_PRIVATE)
 

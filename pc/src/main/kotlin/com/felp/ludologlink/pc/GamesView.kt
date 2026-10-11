@@ -1,6 +1,7 @@
 package com.felp.ludologlink.pc
 
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,10 +84,22 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// GamesView.kt: la pestaña Games (AppState.globalTab = "games"; la elige ConsoleView). Solo
+// interfaz: las filas salen de catalogRows y los iconos de PartIcon (CatalogView.kt), y todo lo que
+// hace llama a AppState. Mapa del archivo:
+//   GamesView           estado (filtros, seleccion, dialogos); el catalogo del PC releido si su
+//                       disco esta (PcCatalog.latest); la barra de arriba; la tabla, una columna por
+//                       sitio; abajo la barra de un sitio (placeSel) o la de lo marcado; los dialogos.
+//   GamePanel           el panel derecho del juego elegido: arte, GameInfoSection y "Where it is".
+//   lockedKind, LockedTag   Steam y DoomForge, entradas sin archivo (ver Shortcuts.isLocked).
+//   ScrapeAndVideoBars  el progreso del scraper y de un video en cada device.
+//   Choice, More, Toggle    controles pequeños de esta pestaña.
+
 private enum class GameSort(val label: String) { NAME("Name"), SIZE("Size"), DATE("Date") }
 
 private val COL_CONSOLE = 96.dp
 private val COL_EXT = 84.dp
+private val COL_SIZE = 72.dp
 
 /**
  * Games: los juegos de todos los sitios en una tabla, fila = juego y columna = sitio (el catalogo
@@ -147,7 +160,18 @@ fun GamesView(app: AppState, window: java.awt.Window) {
     var busy by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Pair<ConsoleEntry, RomFile>?>(null) }
     var deleting by remember { mutableStateOf<Pair<ConsoleEntry, List<RomFile>>?>(null) }
+    /** Del catalogo del PC: a la Papelera (ver AppState.deleteFromCatalog). */
+    var deletingPc by remember { mutableStateOf<List<RomFile>?>(null) }
     var orphans by remember { mutableStateOf<ConsoleEntry?>(null) }
+    /**
+     * El sitio elegido con un clic en su nombre, arriba de su columna: se marca todo lo que hay alli y
+     * la barra de abajo es la de ese sitio (buscar arte, pasarlo a otro sitio, borrarlo). Nulo: la
+     * barra de siempre. Marcar o desmarcar a mano lo deja en nulo (10-10-2026).
+     */
+    var placeSel by remember { mutableStateOf<String?>(null) }
+    /** «Fill missing», calculado y esperando a que se confirme (ver AppState.planFill). */
+    var filling by remember { mutableStateOf<AppState.FillPlan?>(null) }
+    var deletingAll by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     // La subida de ROMs toma la consola elegida como carpeta por defecto (ver UploadPlan).
@@ -191,14 +215,35 @@ fun GamesView(app: AppState, window: java.awt.Window) {
         val keys = visible.mapTo(HashSet()) { it.key }
         selection.retainAll { it in keys }
     }
+    // Una consola que se quedo sin juegos en ningun sitio sale de la lista: si era la elegida, todas.
+    LaunchedEffect(consoleCounts) {
+        val c = console
+        if (rows.isNotEmpty() && c != null && consoleCounts.keys.none { it.equals(c, true) }) console = null
+    }
     val chosen = visible.filter { it.key in picked }
     // Lo que si son archivos, por device: Steam y DoomForge no se copian, ni se bajan, ni se borran.
     val filesBy = devices.associateWith { filesOn(it, chosen) }.filterValues { it.isNotEmpty() }
+    /** Los del catalogo del PC entre lo marcado. */
+    val pcFiles = if (scan == null) emptyList() else chosen.filterNot { it.locked }.mapNotNull { it.cells[CatalogRow.PC]?.rom }
     val single = chosen.singleOrNull()
     /** Para Supr y F2: el unico device que tenga archivos de lo marcado (con varios, el panel o la barra). */
     val keyTarget = filesBy.keys.singleOrNull()
+    /** Borrar desde un icono de la tabla o el panel: de un device, o del catalogo del PC. */
+    fun askDelete(where: String, f: RomFile) {
+        if (where == CatalogRow.PC) deletingPc = listOf(f)
+        else devices.firstOrNull { it.id == where }?.let { deleting = it to listOf(f) }
+    }
+
+    /** Todo lo que hay en [id] entre lo que se ve: su barra de abajo. Otro clic en el mismo, nada. */
+    fun selectPlace(id: String) {
+        selection.clear()
+        if (placeSel == id) { placeSel = null; return }
+        placeSel = id
+        selection += visible.filter { it.cells[id]?.rom != null }.map { it.key }
+    }
 
     fun click(r: CatalogRow, ctrl: Boolean, shift: Boolean) {
+        placeSel = null
         focus.requestFocus()
         val a = anchor
         if (shift && a != null) {
@@ -290,12 +335,21 @@ fun GamesView(app: AppState, window: java.awt.Window) {
                 Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = visible.isNotEmpty() && chosen.size == visible.size, enabled = visible.isNotEmpty(),
-                            onCheckedChange = { on -> selection.clear(); if (on) selection += visible.map { it.key } })
+                            onCheckedChange = { on -> placeSel = null; selection.clear(); if (on) selection += visible.map { it.key } })
                         Text("Game · file", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MenuDim)
                         Text("Console", Modifier.width(COL_CONSOLE), maxLines = 1, style = MaterialTheme.typography.labelLarge, color = MenuDim)
                         Text("Ext", Modifier.width(COL_EXT), maxLines = 1, style = MaterialTheme.typography.labelLarge, color = MenuDim)
-                        for ((_, name) in columns) Text(name, Modifier.width(112.dp), textAlign = TextAlign.Center, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, color = MenuDim)
+                        Text("Size", Modifier.width(COL_SIZE), textAlign = TextAlign.End, maxLines = 1, style = MaterialTheme.typography.labelLarge, color = MenuDim)
+                        Box(Modifier.width(12.dp))
+                        // Clic en el nombre de un sitio: todo lo suyo, con su barra (ver placeSel).
+                        for ((id, name) in columns) {
+                            val on = placeSel == id
+                            Box(Modifier.width(112.dp).selectedRow(on).clickable { selectPlace(id) }.padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center) {
+                                Text(name, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelLarge, color = if (on) MenuInk else MenuDim)
+                            }
+                        }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     val state = rememberLazyListState()
@@ -303,9 +357,11 @@ fun GamesView(app: AppState, window: java.awt.Window) {
                         if (k.type != KeyEventType.KeyDown) return@onKeyEvent false
                         when {
                             k.key == Key.Delete && keyTarget != null -> { deleting = keyTarget to filesBy.getValue(keyTarget); true }
+                            // Solo en el catalogo del PC: de alli.
+                            k.key == Key.Delete && filesBy.isEmpty() && pcFiles.isNotEmpty() -> { deletingPc = pcFiles; true }
                             k.key == Key.F2 && single != null && keyTarget != null -> { renaming = keyTarget to filesBy.getValue(keyTarget).first(); true }
-                            k.key == Key.A && k.isCtrlPressed -> { selection.clear(); selection += visible.map { it.key }; true }
-                            k.key == Key.Escape -> { selection.clear(); true }
+                            k.key == Key.A && k.isCtrlPressed -> { placeSel = null; selection.clear(); selection += visible.map { it.key }; true }
+                            k.key == Key.Escape -> { placeSel = null; selection.clear(); true }
                             else -> false
                         }
                     }) {
@@ -314,9 +370,12 @@ fun GamesView(app: AppState, window: java.awt.Window) {
                         LazyColumn(Modifier.fillMaxSize(), state = state) {
                             items(visible, key = { it.key }) { r ->
                                 val on = r.key in picked
-                                Row(Modifier.fillMaxWidth().selectedRow(on).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    RowContent(on) {
-                                        Checkbox(checked = on, onCheckedChange = { if (!selection.remove(r.key)) selection += r.key; anchor = r.key })
+                                // Elegido un sitio por su columna: se marcan la casilla y su columna, no la fila
+                                // entera (pedido del usuario, 10-10-2026): lo que se toca es lo de ese sitio.
+                                val lit = on && placeSel == null
+                                Row(Modifier.fillMaxWidth().selectedRow(lit).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    RowContent(lit) {
+                                        Checkbox(checked = on, onCheckedChange = { placeSel = null; if (!selection.remove(r.key)) selection += r.key; anchor = r.key })
                                         // Clic en el juego: elegirlo (Ctrl y Shift para varios), como en un explorador.
                                         Column(Modifier.weight(1f).pointerInput(r.key) {
                                             awaitEachGesture {
@@ -337,10 +396,16 @@ fun GamesView(app: AppState, window: java.awt.Window) {
                                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text(anyFile(r)?.let { f -> Protocol.extOf(f.name).removePrefix(".") } ?: "", Modifier.width(COL_EXT),
                                             style = MaterialTheme.typography.bodySmall, color = MenuDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        for ((id, _) in columns) Row(Modifier.width(112.dp), horizontalArrangement = Arrangement.Center,
+                                        // El tamaño del ROM; Steam y DoomForge no son archivos.
+                                        Text(if (r.locked) "" else anyFile(r)?.let { Format.size(it.size) } ?: "", Modifier.width(COL_SIZE),
+                                            textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall, color = MenuDim, maxLines = 1)
+                                        Box(Modifier.width(12.dp))
+                                        for ((id, _) in columns) Row(Modifier.width(112.dp)
+                                            .then(if (on && placeSel == id) Modifier.background(Look.accent.copy(alpha = .22f), Look.shape) else Modifier)
+                                            .padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center,
                                             verticalAlignment = Alignment.CenterVertically) {
                                             // Steam y DoomForge: sin archivo; su arte y su video donde esta la entrada, y en el catalogo del PC.
-                                            if (!r.locked) for (p in Part.entries) PartIcon(app, devices, scan, r, id, p, window) { version++ }
+                                            if (!r.locked) for (p in Part.entries) PartIcon(app, devices, scan, r, id, p, window, ::askDelete) { version++ }
                                             else if (r.cells[id]?.rom != null || id == CatalogRow.PC) {
                                                 r.cells[id]?.rom?.let { LockedTag(it) } ?: Box(Modifier.width(30.dp))
                                                 for (p in listOf(Part.ART, Part.VIDEO)) PartIcon(app, devices, scan, r, id, p, window) { version++ }
@@ -358,16 +423,66 @@ fun GamesView(app: AppState, window: java.awt.Window) {
             // Un juego elegido: su panel.
             single?.let { r ->
                 GamePanel(app, null, devices, scan, r, columns, Modifier.width(300.dp).fillMaxHeight(), window,
-                    onRename = { d, f -> renaming = d to f }, onDelete = { d, f -> deleting = d to listOf(f) },
+                    onRename = { d, f -> renaming = d to f }, onDelete = ::askDelete,
                     onDownload = { d, f -> download(d, listOf(f)) }, changed = { version++ }, onClose = { selection.clear() })
             }
         }
 
         for (d in devices) ScrapeAndVideoBars(app, d)
+        // Buscando o guardando la caratula o el video de un juego (ver ArtPicker).
+        app.picker.looking?.takeIf { app.picker.open == null }?.let { what ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("$what…", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                LinearProgressIndicator(Modifier.width(160.dp))
+                LTextButton(onClick = { app.picker.cancel() }) { Text("Cancel") }
+            }
+        }
 
+        val ps = placeSel
+        // Todo lo de un sitio (clic en su columna): buscar su arte, pasarlo a otro sitio o borrarlo de alli.
+        if (ps != null && chosen.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val pName = columns.firstOrNull { it.first == ps }?.second ?: ps
+            val pDev = devices.firstOrNull { it.id == ps }
+            // Lo que de verdad es un archivo alli (Steam y DoomForge no se pasan ni se borran).
+            val here = chosen.mapNotNull { r -> r.cells[ps]?.rom?.takeIf { !Shortcuts.isLocked(it) }?.let { r to it } }
+            Text("${chosen.size} on $pName · ${Format.size(here.sumOf { it.second.size })}", Modifier.weight(1f), color = MenuDim,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (pDev != null && pDev.info?.ludolog != null && pDev.scrapeState == null)
+                LTextButton(onClick = { app.scrape(pDev, chosen.mapNotNull { it.cells[ps]?.rom }, ScrapeMode.MISSING) }) { Text("Scrape art") }
+            if (ps == CatalogRow.PC && scan != null && here.isNotEmpty() && devices.any { it.info?.ludolog != null && it.scrapeState == null })
+                LTextButton(onClick = { app.scrapeCatalog(here.map { it.second }, devices, scan!!) { version++ } }) { Text("Scrape art") }
+            // A otro sitio: lo que le falte alli, desde este.
+            val targets = buildList<Pair<String, () -> Unit>> {
+                if (ps != CatalogRow.PC && pDev != null && scan != null) {
+                    val missing = here.filter { it.first.cells[CatalogRow.PC]?.rom == null }
+                    if (missing.isNotEmpty()) add("PC catalog · ${missing.size}" to {
+                        missing.forEach { (_, f) -> app.romToCatalog(pDev, f) }
+                        app.toCatalog(missing.map { it.first }, withRom = false) { version++ }
+                    })
+                }
+                for (d in devices) if (d.id != ps) {
+                    val missing = here.filter { it.first.cells[d.id]?.rom == null }
+                    if (missing.isNotEmpty()) add("${d.name} · ${missing.size}" to {
+                        if (ps == CatalogRow.PC) scan?.let { s ->
+                            missing.forEach { (r, f) -> app.romFromCatalog(s, f, d, r.cells[CatalogRow.PC]?.artFile, r.cells[CatalogRow.PC]?.videoFile) }
+                        } else if (pDev != null) app.copyTo(pDev, d, missing.map { it.second })
+                    })
+                }
+            }
+            if (targets.isNotEmpty()) Choice("Transfer to", targets)
+            if (here.isNotEmpty()) LTextButton(onClick = {
+                if (ps == CatalogRow.PC) deletingPc = here.map { it.second } else if (pDev != null) deleting = pDev to here.map { it.second }
+            }, colors = ButtonDefaults.textButtonColors(contentColor = Look.danger)) { Text("Delete from $pName") }
+            LTextButton(onClick = { placeSel = null; selection.clear() }) { Text("Clear") }
+        }
         // Con varios marcados: copiar, al catalogo, bajar y borrar, eligiendo el device donde haga falta.
-        if (chosen.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        else if (chosen.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("${chosen.size} selected", Modifier.weight(1f), color = MenuDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Lo que le falta a cada sitio, de donde este o del scraper (ver AppState.planFill).
+            LTextButton(onClick = {
+                val plan = app.planFill(chosen, devices, scan)
+                if (plan.empty) app.notify("Nothing missing: every place already has these games and their art.") else filling = plan
+            }) { Text("Fill missing…") }
             // A un device: lo que le falte de lo marcado, desde donde este.
             val canCopy = chosen.any { !it.locked && it.cells.values.any { c -> c.rom != null } }
             val dests = devices.filter { d -> chosen.any { !it.locked && it.cells[d.id]?.rom == null } }
@@ -388,11 +503,15 @@ fun GamesView(app: AppState, window: java.awt.Window) {
                         chosen.filter { !it.locked && it.cells[d.id]?.rom != null && seen.add(it.key) }.map { it.cells[d.id]!!.rom!! }
                     })
                 }) { Text("Download") }
-                // Borrar es de un device, y se dice de cual.
-                if (filesBy.size == 1) LTextButton(onClick = { filesBy.entries.first().let { (d, f) -> deleting = d to f } },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Look.danger)) { Text("Delete from ${filesBy.keys.first().name}") }
-                else Choice("Delete from", filesBy.map { (d, f) -> "${d.name} · ${f.size}" to { deleting = d to f } })
             }
+            // Borrar es de un sitio (un device o el catalogo del PC), y se dice de cual.
+            val wheres: List<Triple<String, Int, () -> Unit>> = filesBy.map { (d, f) -> Triple(d.name, f.size) { deleting = d to f } } +
+                (if (pcFiles.isNotEmpty()) listOf(Triple("PC catalog", pcFiles.size) { deletingPc = pcFiles }) else emptyList())
+            if (wheres.size == 1) LTextButton(onClick = wheres[0].third, colors = ButtonDefaults.textButtonColors(contentColor = Look.danger)) {
+                Text("Delete from ${wheres[0].first}")
+            }
+            else if (wheres.size > 1) Choice("Delete from", wheres.map { (name, n, act) -> "$name · $n" to act } +
+                ("Everywhere · ${wheres.sumOf { it.second }}" to { deletingAll = true }))
             LTextButton(onClick = { selection.clear() }) { Text("Clear") }
         } else Text("Click a game for its details · Ctrl/Shift+click to select several · Del deletes, F2 renames",
             style = MaterialTheme.typography.bodySmall, color = MenuDim)
@@ -405,9 +524,60 @@ fun GamesView(app: AppState, window: java.awt.Window) {
         }
     }
     deleting?.let { (d, l) ->
-        DeleteDialog(d, l, onClose = { deleting = null }) { deleting = null; selection.clear(); app.delete(d, l) }
+        DeleteDialog(d.name, l, onClose = { deleting = null }) { deleting = null; selection.clear(); app.delete(d, l) }
+    }
+    deletingPc?.let { l ->
+        DeleteDialog("PC catalog", l, onClose = { deletingPc = null }, recycle = true) {
+            deletingPc = null; selection.clear()
+            scan?.let { s -> app.deleteFromCatalog(s, l) { version++ } }
+        }
+    }
+    if (deletingAll) {
+        val places = filesBy.map { (d, f) -> "${d.name} · ${f.size} ${if (f.size == 1) "file" else "files"}, ${Format.size(f.sumOf { it.size })}" } +
+            (if (pcFiles.isNotEmpty()) listOf("PC catalog · ${pcFiles.size} ${if (pcFiles.size == 1) "file" else "files"}, ${Format.size(pcFiles.sumOf { it.size })}") else emptyList())
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deletingAll = false },
+            title = { Text("Delete from every place?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    places.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    Text("Permanent on the devices, with each .sbi. From the PC catalog, to the Recycle Bin.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = { LTextButton(onClick = {
+                deletingAll = false; selection.clear()
+                app.deleteEverywhere(filesBy, pcFiles, scan) { version++ }
+            }) { Text("Delete everywhere", color = Look.danger) } },
+            dismissButton = { LTextButton(onClick = { deletingAll = false }) { Text("Cancel") } },
+        )
+    }
+    filling?.let { plan ->
+        fun nameOf(id: String) = columns.firstOrNull { it.first == id }?.second ?: id
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { filling = null },
+            title = { Text("Fill what's missing?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (plan.roms.isNotEmpty()) Text("Copy ${plan.roms.size} ${if (plan.roms.size == 1) "game" else "games"} (${Format.size(plan.bytes)}): " +
+                        plan.roms.groupingBy { it.to }.eachCount().entries.joinToString(", ") { (to, n) -> "$n to ${nameOf(to)}" })
+                    if (plan.media.isNotEmpty()) Text("Copy ${plan.media.size} covers and videos from the places that have them: " +
+                        plan.media.groupingBy { it.to }.eachCount().entries.joinToString(", ") { (to, n) -> "$n to ${nameOf(to)}" })
+                    if (plan.scrape.isNotEmpty()) Text("Search online for the rest: " +
+                        plan.scrape.entries.joinToString(", ") { (id, l) -> "${l.size} on ${nameOf(id)}" })
+                    Text("Games go through the transfer queue; their art follows them.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = { LTextButton(onClick = {
+                filling = null; selection.clear()
+                app.fill(plan, devices, scan) { version++ }
+            }) { Text("Fill") } },
+            dismissButton = { LTextButton(onClick = { filling = null }) { Text("Cancel") } },
+        )
     }
     orphans?.let { d -> OrphanMediaDialog(app, d) { orphans = null } }
+    ArtPickDialog(app.picker)
 }
 
 /**
@@ -418,7 +588,7 @@ fun GamesView(app: AppState, window: java.awt.Window) {
 private fun GamePanel(
     app: AppState, pref: ConsoleEntry?, devices: List<ConsoleEntry>, scan: PcCatalog.Scan?, r: CatalogRow,
     columns: List<Pair<String, String>>, modifier: Modifier, window: java.awt.Window,
-    onRename: (ConsoleEntry, RomFile) -> Unit, onDelete: (ConsoleEntry, RomFile) -> Unit,
+    onRename: (ConsoleEntry, RomFile) -> Unit, onDelete: (String, RomFile) -> Unit,
     onDownload: (ConsoleEntry, RomFile) -> Unit, changed: () -> Unit, onClose: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -484,8 +654,19 @@ private fun GamePanel(
                             style = MaterialTheme.typography.bodySmall, color = MenuDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     val actions: List<Pair<String, () -> Unit>> = buildList {
+                        // Buscar en internet, como en Ludolog (ver ArtPicker): reemplaza lo que tenga.
+                        val canFetch = f != null && !Shortcuts.isLocked(f) && (if (d != null) d.info?.ludolog != null && d.scrapeState == null
+                            else scan != null && devices.any { it.info?.ludolog != null && it.scrapeState == null })
                         if (f == null) addAll(fetchOptions(app, devices, scan, r, id, Part.ROM, changed))
-                        else if (d != null) {
+                        else if (d == null) {
+                            // En el catalogo del PC.
+                            scan?.let { s -> add("Show in folder" to { app.showInFolder(PcCatalog.file(s, f)) }) }
+                            if (canFetch) {
+                                add("Fetch box art…" to { app.picker.fetch(r, id, devices, scan, video = false, changed) })
+                                add("Fetch video…" to { app.picker.fetch(r, id, devices, scan, video = true, changed) })
+                            }
+                            add("Delete…" to { onDelete(id, f) })
+                        } else {
                             val lockedEntry = Shortcuts.isLocked(f)
                             // Steam y DoomForge: su nombre se cambia en Info, que llega a los demas devices.
                             if (!lockedEntry) add("Rename…" to { onRename(d, f) })
@@ -499,6 +680,10 @@ private fun GamePanel(
                             }
                             if (!lockedEntry) add("Download…" to { onDownload(d, f) })
                             if (d.info?.ludolog != null) {
+                                if (canFetch) {
+                                    add("Fetch box art…" to { app.picker.fetch(r, id, devices, scan, video = false, changed) })
+                                    add("Fetch video…" to { app.picker.fetch(r, id, devices, scan, video = true, changed) })
+                                }
                                 add("Add art…" to { scope.launch { chooseImage(window)?.let { app.importArt(d, f, it) } } })
                                 add("Add video…" to { scope.launch { chooseVideo(window)?.let { app.importVideo(d, f, it) } } })
                                 if (c.art) add("Remove art" to { app.removeMedia(d, f, video = false) })
@@ -507,7 +692,7 @@ private fun GamePanel(
                                 if (!c.art) addAll(fetchOptions(app, devices, scan, r, id, Part.ART, changed).map { (t, a) -> "Cover: $t" to a })
                                 if (!c.video) addAll(fetchOptions(app, devices, scan, r, id, Part.VIDEO, changed).map { (t, a) -> "Video: $t" to a })
                             }
-                            if (!lockedEntry) add("Delete" to { onDelete(d, f) })
+                            if (!lockedEntry) add("Delete…" to { onDelete(d.id, f) })
                         }
                     }
                     when {

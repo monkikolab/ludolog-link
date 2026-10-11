@@ -46,6 +46,7 @@ import kotlinx.coroutines.withContext
  * Traer ROMs de otro device emparejado, sin el PC: su biblioteca (por defecto, solo lo que falta
  * aqui) y un "Get" por juego, que trae el ROM y despues su caratula y su video. De a uno: traer
  * todo lo que falta llenaria la tarjeta. Ver RomTransfer.
+ * Si el PC dejo aqui la lista de su catalogo, tambien se piden de el (PcCatalogScreen, ver PcRequests).
  */
 @Composable
 fun RomsScreen(ctx: Context) {

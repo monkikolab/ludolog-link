@@ -47,6 +47,9 @@ import kotlin.concurrent.thread
 /**
  * La pestaña de partidas guardadas: la carpeta de cada emulador, sus respaldos y su sincronizacion
  * con las consolas emparejadas. Ver Saves y SaveSync.
+ * Aqui tambien: el explorador de carpetas (FolderBrowser, que abre en lo que propone SaveScan), el
+ * modo flexible (RelaxedRow), devolver un respaldo (RestoreDialog, ver SaveRestore) y los conflictos,
+ * en su lista y en la ventana que MainActivity pone sobre cualquier pestaña (ConflictsPopup).
  */
 @Composable
 fun SavesScreen(ctx: Context, running: Boolean) {
@@ -87,7 +90,7 @@ fun SavesScreen(ctx: Context, running: Boolean) {
                 for (e in list) {
                     ensureActive()
                     val st = runCatching {
-                        Peers.json(Peers.open(reached.host, reached.port, "GET", "/saves/state", mapOf("pkg" to e.pkg), reached.token))
+                        Peers.json(Peers.open(reached.host, reached.port, "GET", "/saves/state", Saves.stateQuery(ctx, e.pkg), reached.token))
                     }.getOrNull()
                     LinkState.post { if (st == null) remote.remove("${p.id}|${e.pkg}") else remote["${p.id}|${e.pkg}"] = when {
                         !st.optBoolean("configured") -> UNSET
@@ -244,6 +247,7 @@ private fun EmulatorCard(
                 if (e.configured) LTextButton(onClick = { Saves.update(ctx, e.pkg) { it.copy(path = "") } }) { Text("Clear") }
             }
             if (e.configured) {
+                RelaxedRow(ctx, e)
                 // Respaldo: cada cuanto y cuantos.
                 Text("Backups" + if (e.lastBackup > 0) " · last ${clock.format(Date(e.lastBackup))}" else "",
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -288,6 +292,82 @@ private fun EmulatorCard(
     }
 }
 
+/** Una consola para el modo flexible: su id (el `group`), su nombre y si Ludolog la abrio con esta app. */
+private class GroupOption(val id: String, val name: String, val used: Boolean)
+
+/**
+ * El modo flexible de un emulador (EmuSaves.relaxed): sincronizar tambien con otra app de la misma
+ * consola en otro device, si alla tambien esta en flexible. Se ve una sola linea con la consola
+ * puesta, que al encenderlo es la mas probable (ver Saves.likelySystem), y «Change…» abre la lista
+ * (pedido del usuario: una lista, no una tira de botones siempre a la vista).
+ */
+@Composable
+private fun RelaxedRow(ctx: Context, e: EmuSaves) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        androidx.compose.material3.Switch(checked = e.relaxed, onCheckedChange = { on ->
+            Saves.update(ctx, e.pkg) { it.copy(relaxed = on, group = it.group.ifEmpty { if (on) Saves.likelySystem(ctx, e.pkg).orEmpty() else "" }) }
+        })
+        Column(Modifier.weight(1f)) {
+            Text("Relaxed matching")
+            Text("Also sync with a different app for the same console on another device, if it's set to relaxed there too.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    if (!e.relaxed) return
+    // Las consolas para la lista: las que Ludolog abrio con esta app primero, despues las carpetas de
+    // ROMs, con el nombre de su systeminfo.txt. Fuera del hilo de la pantalla: lee la tarjeta.
+    val options by androidx.compose.runtime.produceState(emptyList<GroupOption>(), e.pkg) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            // Con los ids y nombres del catalogo de Ludolog: una carpeta `n3ds` es la consola `3ds`, y
+            // las dos consolas tienen que elegir la misma (ver Saves.canonicalSystem).
+            val cat = Saves.catalog(ctx)
+            fun id(name: String) = Saves.canonicalSystem(ctx, name)
+            val folders = runCatching {
+                RomStore.root(ctx)?.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }
+                    ?.mapNotNull { f -> cat?.canonicalId(f.name) }
+            }.getOrNull().orEmpty()
+            val used = Saves.systemsOf(ctx, e.pkg).map(::id)
+            val likely = listOfNotNull(Saves.likelySystem(ctx, e.pkg)?.let(::id))
+            fun nameOf(s: String) = cat?.byId?.get(s)?.name ?: s.uppercase()
+            (likely + used + folders.sortedBy { nameOf(it).lowercase() }).distinct()
+                .map { s -> GroupOption(s, nameOf(s), s in used) }
+        }
+    }
+    var choosing by remember { mutableStateOf(false) }
+    val name = options.firstOrNull { it.id == Saves.canonicalSystem(ctx, e.group) }?.name ?: e.group.uppercase()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Console", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (e.group.isEmpty()) "None" else name, Modifier.weight(1f, fill = false))
+        LOutlinedButton(onClick = { choosing = true }) { Text("Change…") }
+    }
+    Text(if (e.group.isEmpty()) "Choose the console it's used for. The other device needs the same one."
+        else "Saves from a different app may not be compatible. Check a game after the first sync: what's replaced is backed up first.",
+        style = MaterialTheme.typography.bodySmall, color = Look.warn)
+    if (choosing) AlertDialog(
+        onDismissRequest = { choosing = false },
+        title = { Text("Console for ${Saves.appName(ctx, e.pkg)}") },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                for ((i, o) in options.withIndex()) {
+                    val on = o.id == Saves.canonicalSystem(ctx, e.group)
+                    Box(Modifier.fillMaxWidth().selectedRow(on)
+                        .clickable { Saves.update(ctx, e.pkg) { it.copy(group = o.id) }; choosing = false }
+                        .padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        RowContent(on) {
+                            Column {
+                                Text(o.name, color = if (on) MenuInk else MenuDim)
+                                val hint = listOfNotNull(o.id, "most likely".takeIf { i == 0 }, "used with this app in Ludolog".takeIf { o.used })
+                                Text(hint.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = if (on) MenuInk else MenuDim)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { LTextButton(onClick = { choosing = false }) { Text("Close") } },
+    )
+}
+
 /** Una app instalada para poner su carpeta de partidas. */
 @Composable
 private fun AddEmulatorDialog(ctx: Context, already: Set<String>, seen: Set<String>, onPick: (String) -> Unit, onClose: () -> Unit) {
@@ -296,8 +376,9 @@ private fun AddEmulatorDialog(ctx: Context, already: Set<String>, seen: Set<Stri
         pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
             .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
             .filter { it.first !in already && it.first != ctx.packageName }
-            // Primero los que Ludolog ya abrio: son los emuladores de verdad.
-            .distinctBy { it.first }.sortedWith(compareBy({ it.first !in seen }, { it.second.lowercase() }))
+            // Primero los que Ludolog ya abrio, que son los emuladores de verdad, y despues los
+            // conocidos (SaveScan): entre treinta apps del sistema habia que buscarlos.
+            .distinctBy { it.first }.sortedWith(compareBy({ it.first !in seen }, { !SaveScan.known(it.first) }, { it.second.lowercase() }))
     }
     AlertDialog(
         onDismissRequest = onClose,
@@ -308,7 +389,7 @@ private fun AddEmulatorDialog(ctx: Context, already: Set<String>, seen: Set<Stri
                     // Al elegirlo se abre el explorador para poner su carpeta.
                     Column(Modifier.fillMaxWidth().clickable { onPick(pkg) }.padding(vertical = 8.dp)) {
                         Text(label)
-                        Text(pkg + if (pkg in seen) " · used in Ludolog" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(pkg + when { pkg in seen -> " · used in Ludolog"; SaveScan.known(pkg) -> " · emulator"; else -> "" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -369,6 +450,31 @@ private fun FolderBrowser(ctx: Context, pkg: String, start: String, onPick: (Str
     val subdirs = remember(listing) { listing.filter { it.isDirectory }.sortedBy { it.name.lowercase() } }
     val files = remember(listing) { listing.count { it.isFile } }
     val volumes = remember { RomStore.volumePaths(ctx).map { java.io.File(it) } }
+    // Donde suele guardar ese emulador (SaveScan): sin carpeta puesta, se abre en la mejor, y se
+    // proponen todas arriba. La persona mira y elige; no se pone sola.
+    val guesses by androidx.compose.runtime.produceState<List<SaveScan.Guess>?>(null, pkg) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { SaveScan.guess(ctx, pkg) }.getOrDefault(emptyList())
+        }
+    }
+    val opened = remember { dir }
+    androidx.compose.runtime.LaunchedEffect(guesses) {
+        // Solo si no se movio entretanto: el repaso puede tardar un momento en una tarjeta lenta.
+        if (start.isEmpty() && dir == opened) guesses?.firstOrNull()?.let { dir = java.io.File(it.path) }
+    }
+    val clock = remember { SimpleDateFormat("d MMM yyyy", Locale.US) }
+    // Una ruta como los botones de arriba la llaman: "Emulator's data/…", "Internal/…" o el volumen.
+    // Y las tiras de ceros (el usuario 0…0 de Switch, los ids de la tarjeta de 3DS), cortas.
+    fun shortPath(p: String): String {
+        val data = java.io.File(internal, "Android/data/$pkg/files").absolutePath + "/"
+        val root = internal.absolutePath + "/"
+        val named = when {
+            p.startsWith(data) -> "Emulator's data/" + p.removePrefix(data)
+            p.startsWith(root) -> "Internal/" + p.removePrefix(root)
+            else -> volumes.firstOrNull { p.startsWith(it.absolutePath + "/") }?.let { v -> v.name + "/" + p.removePrefix(v.absolutePath + "/") } ?: p
+        }
+        return named.replace(Regex("0{16,}"), "0…0")
+    }
     // Una ventana grande, no un AlertDialog: en una pantalla apaisada de consola el de sistema es
     // estrecho y se comia la ruta y la lista.
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose,
@@ -391,6 +497,32 @@ private fun FolderBrowser(ctx: Context, pkg: String, start: String, onPick: (Str
                     }),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done))
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    // Las propuestas, arriba de la lista y dentro de lo que se desplaza: fuera, cuatro rutas
+                    // largas se comian la lista y los botones de abajo.
+                    when (val g = guesses) {
+                        null -> Text("Looking for its saves…", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> if (g.isNotEmpty()) {
+                            Text("Likely saves folders. Check before using one.", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            for (x in g) {
+                                val on = x.path == dir.absolutePath
+                                Box(Modifier.fillMaxWidth().selectedRow(on).clickable { dir = java.io.File(x.path) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                    RowContent(on) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(shortPath(x.path), Modifier.weight(1f), fontFamily = FontFamily.Monospace,
+                                                style = MaterialTheme.typography.bodySmall, color = if (on) MenuInk else MenuDim)
+                                            Text(if (x.files == 0) "empty" else "${x.files}${if (x.files >= 500) "+" else ""} " +
+                                                "${if (x.files == 1) "file" else "files"} · ${clock.format(Date(x.changed))}",
+                                                style = MaterialTheme.typography.bodySmall, color = if (on) MenuInk else MenuDim)
+                                        }
+                                    }
+                                }
+                            }
+                        } else Text("No likely saves folder found: look for it below.", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     dir.parentFile?.takeIf { it.canRead() }?.let { up ->
                         Text("..  (up)", Modifier.fillMaxWidth().clickable { dir = up }.padding(vertical = 10.dp))
                     }
@@ -433,13 +565,15 @@ private fun ConflictList(ctx: Context, conflicts: List<SaveConflict>) {
         for ((key, group) in conflicts.groupBy { it.peerId to it.pkg }) {
             if (group.size < 2) continue
             var working by remember(key) { mutableStateOf(false) }
+            // El porque si no se pudo: se perdia, y el boton parecia no hacer nada.
+            var error by remember(key) { mutableStateOf<String?>(null) }
+            fun all(here: Boolean) { working = true; error = null; SaveSync.resolveMany(ctx, group, here) { err -> working = false; error = err } }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${Saves.appName(ctx, key.second)} · ${group.size} games:", Modifier.weight(1f, fill = false))
-                LOutlinedButton(onClick = { working = true; SaveSync.resolveMany(ctx, group, true) { working = false } },
-                    enabled = !working) { Text("All from this device") }
-                LOutlinedButton(onClick = { working = true; SaveSync.resolveMany(ctx, group, false) { working = false } },
-                    enabled = !working) { Text("All from ${group.first().peerName}") }
+                LOutlinedButton(onClick = { all(true) }, enabled = !working) { Text("All from this device") }
+                LOutlinedButton(onClick = { all(false) }, enabled = !working) { Text("All from ${group.first().peerName}") }
             }
+            error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Look.danger) }
         }
         for (c in conflicts) ConflictRow(ctx, c)
     }

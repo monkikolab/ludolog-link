@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in Ludolog Link doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this! The more detail, the faster it gets fixed.
+        Questions and ideas are welcome in [Ludolog's Discussions](https://github.com/monkikolab/ludolog-front-end/discussions).
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - Save sync
+        - ROM transfer
+        - Pairing or finding devices
+        - Companion sessions
+        - The PC app
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What went wrong, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How to make it happen again, if you know.
+  - type: textarea
+    id: devices
+    attributes:
+      label: Devices involved
+      description: Each handheld with its Android version, and the PC's Windows version if it's involved.
+      placeholder: |
+        - Retroid Pocket 5, Android 13
+        - AYN Odin 3, Android 15
+        - Windows 11 PC (installer / portable)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Link version
+      description: In Settings → About, on each app.
+      placeholder: e.g. 0.6.0
+    validations:
+      required: true
+  - type: input
+    id: emulator
+    attributes:
+      label: Emulator, for save sync problems
+      placeholder: e.g. RetroArch 1.22.2, saves folder RetroArch/saves
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics, screenshots or log
+      description: |
+        Settings → About → *Export diagnostics* saves a zip, on the handheld and on the PC. Have a
+        look at it first, then drag it here. The *Log* tab often says what went wrong, too.

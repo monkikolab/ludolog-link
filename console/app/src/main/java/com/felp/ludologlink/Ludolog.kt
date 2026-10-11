@@ -11,11 +11,23 @@ import org.xmlpull.v1.XmlPullParser
 import java.io.File
 
 /**
- * Lo que Link sabe de Ludolog, el front-end de la misma consola.
+ * Lo que Link sabe de Ludolog, el front-end de la misma consola, y como le avisa.
  *
- * Todo por fuera: su carpeta de datos se LEE, nunca se escribe —Ludolog guarda config.xml en
- * memoria y pisaria cualquier cambio—, y lo que haya que cambiar se le pide por su puente
- * (LinkBridge, permiso de firma). El contrato esta en ludolog-front-end/docs/ludolog-link.md.
+ * config.xml NUNCA se escribe: Ludolog lo guarda en memoria y pisaria cualquier cambio. Los ajustes
+ * nuevos se le dejan aparte y los aplica ella ([queueConfig]). Lo que si escribe Link en su carpeta de
+ * datos, y el aviso que manda despues (broadcast solo al paquete de Ludolog, que su puente, LinkBridge,
+ * recibe con permiso de firma):
+ * - `link/`: config-update.json (CONFIG_CHANGED), restore/ con su testigo `.ready` (RESTORE) y
+ *   edits-in.json (EDITS_IN, ver MetaEdits). De ahi lee tambien lo que deja Ludolog: played.tsv (ver
+ *   Saves) y edits.tsv (ver MetaEdits).
+ * - `media/`: arte y videos que llegan del PC o de otra consola, o que se quitan (MEDIA_CHANGED, o
+ *   LIBRARY_CHANGED si esa Ludolog no la conoce: ver [mediaChanged]). Los huerfanos que borra el PC
+ *   pueden estar en cualquier carpeta de medios ([mediaRoots]).
+ * - `companion/`: los cuadernos de OTRAS consolas (nunca el propio: ver [installLogbook]) y sus
+ *   caratulas en companion/covers/ (CompanionCovers). Sin aviso: Ludolog los lee por su cuenta.
+ * Por las carpetas de ROMs, LIBRARY_CHANGED (con espera) y MOVED; STATE al encenderse o apagarse Link.
+ * Las claves de arte van por su proveedor (content://<paquete>.keys, ver [artKeys]). El contrato esta
+ * en ludolog-front-end/docs/ludolog-link.md.
  */
 object Ludolog {
     const val PACKAGE = BuildConfig.LUDOLOG_PACKAGE
@@ -317,11 +329,6 @@ object Ludolog {
     private val IMAGE_EXT = setOf("png", "jpg", "jpeg", "webp")
     private val VIDEO_EXT = setOf("mp4", "mkv", "webm")
 
-    /**
-     * Que juegos tienen arte y video, buscados donde los busca Ludolog (ArtIndex.findRoots): la
-     * carpeta de medios del tema puesto, la de datos y las de ES-DE en cada unidad. Devuelve
-     * claves «consola/nombre» en minusculas, con la consola como se llama la carpeta.
-     */
     /** Donde busca Ludolog arte y videos (ArtIndex.findRoots), en ese orden. */
     private fun mediaRoots(ctx: Context): List<File> {
         val data = dataDir(ctx)
@@ -433,6 +440,11 @@ object Ludolog {
         }
     }
 
+    /**
+     * Que juegos tienen arte y video, buscados donde los busca Ludolog (ArtIndex.findRoots): la
+     * carpeta de medios del tema puesto, la de datos y las de ES-DE en cada unidad. Devuelve
+     * claves «consola/nombre» en minusculas, con la consola como se llama la carpeta.
+     */
     fun artIndex(ctx: Context): JSONObject {
         val roots = mediaRoots(ctx)
         val art = HashSet<String>()
@@ -549,6 +561,30 @@ object Ludolog {
     fun editsIn(ctx: Context) {
         if (handles(ctx, ACTION_EDITS_IN)) send(ctx, Intent(ACTION_EDITS_IN))
     }
+
+    /** Donde Ludolog da y toma las claves de sus fuentes de arte (su LinkKeys): solo a este Link. */
+    private val KEYS = android.net.Uri.parse("content://$PACKAGE.keys")
+
+    /**
+     * Las claves de las fuentes de arte de Ludolog (las de IGDB), en claro y con cuando se puso cada
+     * una, para pasarlas a los aparatos emparejados (ver ArtKeys). Nulo si Ludolog no esta o es
+     * anterior a la 0.6.2 (sin LinkKeys). Solo en memoria: Link no las guarda en ningun sitio.
+     */
+    fun artKeys(ctx: Context): Map<String, com.felp.ludolog.kit.KeyBox.Entry>? = runCatching {
+        val b = ctx.contentResolver.call(KEYS, "get", null, null) ?: return null
+        b.getStringArray("keys").orEmpty().associateWith { k ->
+            com.felp.ludolog.kit.KeyBox.Entry(b.getString("v.$k").orEmpty(), b.getLong("t.$k"))
+        }
+    }.getOrNull()
+
+    /** Claves llegadas de otro aparato: Ludolog toma las mas nuevas y las cifra a su modo. Cuantas tomo, o nulo. */
+    fun putArtKeys(ctx: Context, m: Map<String, com.felp.ludolog.kit.KeyBox.Entry>): Int? = runCatching {
+        val b = android.os.Bundle().apply {
+            putStringArray("keys", m.keys.toTypedArray())
+            for ((k, e) in m) { putString("v.$k", e.value); putLong("t.$k", e.at) }
+        }
+        ctx.contentResolver.call(KEYS, "put", null, b)?.getInt("changed")
+    }.getOrNull()
 
     /** ROMs renombrados: Ludolog mueve lo de cada juego a la ruta nueva. Sin espera. */
     fun moved(ctx: Context, from: List<String>, to: List<String>) {

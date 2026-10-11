@@ -65,6 +65,14 @@ import java.awt.datatransfer.DataFlavor
 import java.io.File
 import io.github.vinceglb.filekit.FileKit
 
+// Main.kt: el arranque de Ludolog Link PC y el marco de la ventana.
+//   main     con argumentos, las herramientas sin ventana (--export-icon para empaquetar,
+//            --selftest contra una consola, --companion y --video de prueba); si no, la ventana:
+//            crea el unico AppState, con un ambito que sobrevive a los fallos, y le pone el tema.
+//   Root     barra lateral + ConsoleView + panel de transferencias, el aviso de abajo, soltar
+//            archivos para subirlos (UploadPlan) y los dialogos de emparejar y de subir.
+//   Sidebar, ConsoleCard, LookPicker, EmptyState, NoticeBar: las piezas de ese marco.
+
 fun main(args: Array<String>) {
     when (args.firstOrNull()) {
         "--export-icon" -> return exportIcon(File(args[1]))

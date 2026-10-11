@@ -65,6 +65,10 @@ import java.io.File
  * va con mando: pestañas que se cambian con los gatillos y una pila que se deshace con B. Aqui,
  * pestañas que se tocan y un boton de volver. La lista de pestañas, las medidas de cada ranking
  * y sus notas son las de StatsWindow.kt: si cambian alli, cambian aqui.
+ *
+ * Pinta ConsoleEntry.book (lo llena CompanionReader). El grafico y los rankings abren el cuaderno
+ * aparte, con Logbook(ctx, withOthers = true): ese abre el de la consola a la que apunta ahora
+ * CompanionReader.point (la elegida, ver AppState.select), no por fuerza la de [e].
  */
 
 private val PAGES = listOf(

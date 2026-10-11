@@ -10,6 +10,9 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+// About.kt: lo que hay detras de Settings → About (la pantalla es AboutPane, en Sections.kt):
+// buscar version nueva (PcUpdates; Main.kt tambien pregunta al arrancar) y exportar el diagnostico.
+
 /**
  * Si hay una version nueva de Ludolog Link en GitHub (07-10-2026; ver ReleaseCheck en el kit).
  * Como mucho una vez al dia al arrancar, o ya desde About. Se avisa una sola vez de cada version.

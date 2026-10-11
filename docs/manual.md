@@ -45,11 +45,20 @@ be switched from a quick settings tile and from the notification.
 ## Saves and backups
 
 - Choose each emulator's saves folder with *Add emulator…* and *Set folder…*. Others are left alone.
+  Link suggests where that emulator usually keeps its saves and opens there: check it, or pick
+  another folder.
 - The newest save is the one from the device where the game was played last, as Ludolog recorded it,
   never by file dates. If that can't decide, nothing is overwritten: you pick the version to keep and
   the other is backed up.
 - With *Check before playing*, Ludolog gets the newest save from your other devices before a game
   starts.
+- Saves aren't written while a game is open in that emulator. A game counts as closed when you go
+  back to Ludolog on that device; if a device says a game is still open, close it there and return
+  to Ludolog.
+- *Relaxed matching*, on an emulator's card, also syncs it with a different app for the same console
+  on another device (a fork of the same emulator, for example), when that one is set to relaxed with
+  the same console too. Saves from a different app may not be compatible: check a game after the
+  first sync.
 - Each emulator is backed up hourly, daily or weekly (you choose how many to keep), and before
   anything is replaced. Over the *Backup space* limit, the oldest go first. *Restore…* backs up the
   current saves first, so it can be undone.
@@ -81,18 +90,30 @@ Turn on PC Link on the device and click *Search*. Each connected device has thes
   Ludolog restarts to apply it; restoring logbooks loses anything played since the backup.
 - **Games**: every game on every connected device and in the PC catalog, with filters for console,
   device, *Missing* files or art, and *Conflicts*. Click a game to copy, download, rename or delete
-  it, fix or scrape its art, or *Edit* its name, description and genre on every device. Drop files on
-  the window to upload them to the selected device.
+  it, fix or scrape its art, or *Edit* its name, description and genre on every device. Each icon in
+  the table does the same for its place: a grey one brings what's missing, a lit one fetches another
+  cover or video, and a lit game icon deletes it from there. *Fetch box art* and *Fetch video* search
+  like Ludolog does, with the same sources, and let you choose when more than one result fits. Click
+  a place's name above its column to select everything there, then scrape its art, transfer it to
+  another place or delete it. With the corner checkbox, *Fill missing…* copies each game and its art
+  to the places that lack them and searches online for what no place has, after showing what it will
+  do. The *Size* column shows each game's file size. Drop files on the window to upload them to the
+  selected device.
 - **Consoles**: set a console's name and description on every device that has it.
 - **Saves**: save backups copied from the device; restore any version (close the game first).
 - **Companion**, with its statistics, and the **Log**.
-- **Settings**: *This PC* (name, folders, PC catalog), *Console* (Ludolog's settings for the device,
-  sent with *Sync to device*) and *About*.
+- **Settings**: *This PC* (name, folders, PC catalog, and the IGDB keys under *Art sources*),
+  *Console* (Ludolog's settings for the device, sent with *Sync to device*) and *About*.
+
+The IGDB keys only need to be entered once, on any device or on the PC: Link passes them, encrypted,
+to every paired device and to the PC, and the latest change wins. *Turn off everywhere* clears them
+on all of them.
 
 Link keeps its things in a data folder: the installed app in your Windows user folder, the portable
 copy next to itself. Backups, downloaded games and the **PC catalog** (games kept on the PC, one
 folder per console, with their box art and videos) go inside it unless you move them in *Settings →
-This PC*. Deleting a game from a device is permanent. If you quit during transfers, downloads resume later
+This PC*. Deleting a game from a device is permanent; from the PC catalog it goes to the Recycle Bin.
+If you quit during transfers, downloads resume later
 and partial uploads are discarded.
 
 ## About and diagnostics

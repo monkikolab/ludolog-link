@@ -7,6 +7,10 @@ import java.io.File
 /*
  * Lo que el scraper de Ludolog (Scrape.kt, ArtSources.kt, ArtFree.kt, ArtVideo.kt, Match.kt,
  * compilados tal cual) pide de archivos que el PC no compila. Ver docs/ludolog-link.md.
+ *
+ * Imitan VideoScale, VideoTrim, TapeQueue, ArtRevisions, ArtKind (de Art.kt) y ArtIndex. Los
+ * archivos que se compilan tal cual estan en ludologSources, en build.gradle.kts: si en Ludolog
+ * empiezan a pedir algo nuevo de fuera, aqui va su imitacion o el PC deja de compilar.
  */
 
 /**

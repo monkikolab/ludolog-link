@@ -21,6 +21,9 @@ import java.io.File
  * StatsWindow.kt (el `produceState` que llena su `Book`): primero las misiones cumplidas, que
  * dan experiencia, y luego el personaje. Si ese orden cambia en Ludolog, cambia aqui.
  * Ver ludolog-front-end/docs/ludolog-link.md.
+ *
+ * Lo usa AppState: readCompanion deja el [Book] en ConsoleEntry.book (CompanionView y Overview lo
+ * pintan) y select llama a [point] con la consola que se pasa a mirar.
  */
 internal object CompanionReader {
 
@@ -37,18 +40,17 @@ internal object CompanionReader {
         CompanionReader::class.java.getResourceAsStream("/ludolog/$name")!!.bufferedReader().use { it.readText() }
     }
 
+    /** A que consola apunta ahora (ver [read]). */
+    private var pointed: Triple<File, String, String?>? = null
+
     /**
+     * Pone a punto lo que las cuentas y las pestañas de Ludolog leen de fuera —la carpeta de datos,
+     * el modelo, los cuadernos—: es de UNA consola a la vez, la que se esta mirando.
+     *
      * [dataDir] es la copia local de `<volumen>/Ludolog` de la consola: `companion/<consola>.db`,
      * `config.xml`, `dossiers/`, `systems*`, `catalog/`. [model] es su Build.MODEL; [ownId], los
      * cuatro digitos de `log.console.id`, que dicen cual de los cuadernos es el suyo.
      */
-    /**
-     * Pone a punto lo que las cuentas y las pestañas de Ludolog leen de fuera —la carpeta de datos,
-     * el modelo, los cuadernos—: es de UNA consola a la vez, la que se esta mirando.
-     */
-    /** A que consola apunta ahora (ver [read]). */
-    private var pointed: Triple<File, String, String?>? = null
-
     fun point(dataDir: File, model: String, ownId: String?): Pair<File, List<File>> {
         pointed = Triple(dataDir, model, ownId)
         DataHome.dir = dataDir

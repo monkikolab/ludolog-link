@@ -39,7 +39,11 @@ import java.util.zip.ZipFile
  * Link no escribe en la carpeta de Ludolog: deja los archivos en espera y Ludolog los pone en su
  * sitio al reiniciarse, sin partida en curso (LinkRestore en Ludolog; docs/ludolog-link.md).
  * Los ajustes van como diferencia con el config.xml de hoy, por el mismo camino que "Sync to
- * console". Antes de nada se guarda una instantanea de como esta: restaurar se puede deshacer.
+ * device". Antes de nada se guarda una instantanea de como esta: restaurar se puede deshacer.
+ *
+ * Aqui estan las partes, la diferencia de ajustes (configDiff, configChanges, que usa tambien
+ * AppState.syncConfig) y el dialogo de Overview (RestoreDialog). El envio lo hace AppState.restore,
+ * con DELETE, PUT y POST a /ludolog/restore.
  */
 enum class RestorePart(val title: String, val what: String) {
     SETTINGS("Settings", "Options, favorites, play counts, names and emulators."),

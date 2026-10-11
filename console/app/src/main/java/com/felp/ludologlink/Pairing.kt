@@ -12,6 +12,10 @@ import java.security.SecureRandom
  * Emparejamiento como el del Bluetooth: el PC lo pide, la consola muestra un
  * codigo, y quien lo teclee en el PC recibe un token. Sin token no se puede
  * leer ni escribir nada: cualquier dispositivo de la Wi-Fi veria el puerto.
+ *
+ * Igual con otra consola (Peers.requestPair y Peers.confirmPair, que ademas le dan un token de vuelta).
+ * Rutas: /pair/request, /pair/confirm y /pair/claim (HttpServer). Los tokens viven en Prefs: `tokens`
+ * (token: nombre de quien lo tiene) y `token_owners` (token: id fijo del PC, si lo dijo).
  */
 object Pairing {
     private const val TTL_MS = 120_000L

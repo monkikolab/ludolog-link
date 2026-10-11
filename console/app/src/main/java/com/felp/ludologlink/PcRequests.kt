@@ -10,6 +10,7 @@ import java.io.File
  * catalogo al conectarse (PUT /pc/catalog) y lee los pedidos (GET /pc/requests) mientras esta abierto,
  * para mandarlos con su arte por su cola de subidas. Un pedido se cumple cuando el archivo esta aqui;
  * hecho con el PC apagado, llega la proxima vez que se abra. Ver RomsScreen y, en el PC, CatalogRequests.
+ * Se guarda en `LudologLink/state/pc-catalog.json` y `state/pc-requests.json` (ver Saves.home).
  */
 object PcRequests {
 

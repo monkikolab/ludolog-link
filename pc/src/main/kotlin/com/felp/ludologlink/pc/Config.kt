@@ -138,8 +138,6 @@ object Config {
     /** Lo de cada consola en este PC: su copia de la carpeta de datos de Ludolog y sus instantaneas. */
     fun consoleDir(id: String) = File(backupRoot, id)
 
-    /** El barrido del tema de fosforo en este PC: "subtle", "console" o "off". */
-
     /** Donde se guardan las letras de los temas bajadas de la consola. */
     fun themeDir(id: String) = File(dir, "themes/$id")
 

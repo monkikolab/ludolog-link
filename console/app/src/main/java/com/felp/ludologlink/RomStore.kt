@@ -14,6 +14,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
+// La carpeta de ROMs de esta consola (Prefs.romsRoot), para HttpServer y RomTransfer: detectarla (la
+// que fijo Ludolog, la de ES-DE o la carpeta ROMs con mas sistemas), listarla para las rutas roms y
+// systems (por DirIndex: el PC la pide a menudo), dar rutas seguras con las reglas del kit
+// (Protocol.safeParts) y lo que cuenta la ruta info. Al final, BuildInfo (la version).
+
 data class Volume(
     val path: String,
     val label: String,

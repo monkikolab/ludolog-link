@@ -7,12 +7,17 @@ import com.felp.frontcomp.Game
 import com.felp.frontcomp.GameDb
 import com.felp.ludolog.kit.Protocol
 
+// Names.kt: que es cada archivo de un device, con las reglas de Ludolog. Shortcuts dice lo que no
+// es un juego (y que Steam y DoomForge son entradas bloqueadas); Names, que juego es (Detector de
+// Ludolog sobre el catalogo de ese device, con GameCache delante), como se llama alli y si tiene
+// arte o video. Lo usa casi todo: AppState, la tabla de Games, el scraper y el Companion del PC.
+
 /**
- * Lo que la pestaña ROMs no enseña, porque no son juegos. Los accesos directos, que Ludolog trata
- * igual: los del PC (Steam, GameHub...), los de apps de Android, los perfiles de DoomForge y la
- * carpeta de emuladores (que su Scanner salta). Y los archivos de acompañamiento: los .txt que
- * dicen que poner en cada carpeta ("Put doom.wad here") y los .sbi, que van con su .cue/.bin y
- * se renombran y borran con el.
+ * Lo que Games no enseña (ConsoleEntry.games lo quita), porque no son juegos. Los accesos
+ * directos, que Ludolog trata igual: los del PC (Steam, GameHub...), los de apps de Android, los
+ * perfiles de DoomForge y la carpeta de emuladores (que su Scanner salta). Y los archivos de
+ * acompañamiento: los .txt que dicen que poner en cada carpeta ("Put doom.wad here") y los .sbi,
+ * que van con su .cue/.bin y se renombran y borran con el.
  */
 object Shortcuts {
     private val EXT = setOf("steam", "epic", "gog", "amazon", "pcgame", "gamehub", "desktop", "shortcut", "app", "doomforge")
@@ -46,12 +51,6 @@ object Shortcuts {
 }
 
 /**
- * Como se llama un juego en Ludolog, con su misma regla (LibraryViewModel.displayTitle): el
- * nombre puesto a mano; si no, el del catalogo cuando la ficha lo identifico con seguridad, sin
- * sus etiquetas; y si no, el que sale del fichero. Con Detector y Dossiers de Ludolog, compilados
- * tal cual, sobre la copia de su carpeta de datos.
- */
-/**
  * Que juego es una ruta, segun un catalogo: siempre lo mismo para el mismo catalogo y la misma ruta,
  * asi que se guarda. Se preguntaba hasta cinco veces por ROM (nombre, clave, arte, video...) y cada
  * una pasaba por las expresiones de Detector; con miles de ROMs, la tabla del catalogo se congelaba.
@@ -72,6 +71,12 @@ internal object GameCache {
     }
 }
 
+/**
+ * Como se llama un juego en Ludolog, con su misma regla (LibraryViewModel.displayTitle): el
+ * nombre puesto a mano; si no, el del catalogo cuando la ficha lo identifico con seguridad, sin
+ * sus etiquetas; y si no, el que sale del fichero. Con Detector y Dossiers de Ludolog, compilados
+ * tal cual, sobre la copia de su carpeta de datos.
+ */
 internal object Names {
 
     /** La ruta con que Ludolog conoce el juego: la clave de todo lo suyo (`name.game.<ruta>`...). */
